@@ -15,23 +15,28 @@ public class Router {
 	protected LinkStateDatabase lsd;
 	RouterDescription rd = new RouterDescription();
 	private ServerSocket serverSocket;
-//	Link[] ports = new Link[4];
+	// Link[] ports = new Link[4];
 
 	// assuming that all routers are with 4 ports
 	// I changed this to HashMap so it's easier to use
 	HashMap<String,Link> ports;
 
 	public Router(Configuration config) {
+		// import configuration settings
 		rd.simulatedIPAddress = config.getString("socs.network.router.ip");
+		rd.processPortNumber = config.getShort("socs.network.router.port");
+
 		lsd = new LinkStateDatabase(rd);
 		ports = new HashMap<String,Link>();
-		// Create a new thread for the terminal
+
+		// Create a new thread for the router client
 		(new Thread() {
 			public void run() {
 				terminal();
 			}
 		}).start();
-		// Original main thread is just listening for incoming connections
+
+		// Main thread is listening for incoming connections
 		requestHandler();
 	}
 	
@@ -96,13 +101,14 @@ public class Router {
 	 */
 	private void requestHandler() {
 		try {
-			serverSocket = new ServerSocket(3000);
+			serverSocket = new ServerSocket(this.rd.processPortNumber);
 			// Might need to change this in the future
 			while (ports.size() < 4) {
 				Socket socket = serverSocket.accept();
 				// (short) -1 because as a "server" receiving attach requests,
 				// it doesn't have access to the link weight
-				new RouterThread(socket, true, this, rd, (short) -1).start();
+				System.out.println("Starting router thread");
+				new RouterThread(socket, false, this, rd, (short) -1).start();
 			}
 		} catch (IOException e) {
 			throw new RuntimeException(e);
@@ -139,6 +145,7 @@ public class Router {
 	 * output the neighbors of the routers
 	 */
 	private void processNeighbors() {
+		System.out.println("Router neighbors:");
 		for (String i : ports.keySet()) {
 			System.out.println(i);
 		}
@@ -162,35 +169,42 @@ public class Router {
 		try {
 			InputStreamReader isReader = new InputStreamReader(System.in);
 			BufferedReader br = new BufferedReader(isReader);
+			
 			System.out.print(">> ");
 			String command = br.readLine();
 			while (true) {
 				if (command.startsWith("detect ")) {
 					String[] cmdLine = command.split(" ");
 					processDetect(cmdLine[1]);
-				} else if (command.startsWith("disconnect ")) {
+				} 
+				else if (command.startsWith("disconnect ")) {
 					String[] cmdLine = command.split(" ");
 					processDisconnect(Short.parseShort(cmdLine[1]));
-				} else if (command.startsWith("quit")) {
-					processQuit();
-					// Theoretically done
-				} else if (command.startsWith("attach ")) {
+				} 
+				else if (command.startsWith("attach ")) {
 					String[] cmdLine = command.split(" ");
 					processAttach(cmdLine[1], Short.parseShort(cmdLine[2]), cmdLine[3], Short.parseShort(cmdLine[4]));
-				// TO DO: START()
-				} else if (command.equals("start")) {
+					// TO DO: START()
+				} 
+				else if (command.equals("start")) {
 					processStart();
-				} else if (command.equals("connect ")) {
+				} 
+				else if (command.equals("connect")) {
 					String[] cmdLine = command.split(" ");
 					processConnect(cmdLine[1], Short.parseShort(cmdLine[2]), cmdLine[3], Short.parseShort(cmdLine[4]));
-				} else if (command.equals("neighbors")) {
+				} 
+				else if (command.equals("neighbors")) {
 					// output neighbors
 					// DONE: theoretically
 					processNeighbors();
-				} else {
-					// invalid command
-					// Why break here? does this need to be changed? worry after
+				} 
+				else if (command.startsWith("quit ")) {
+					processQuit();
 					break;
+					// Theoretically done
+				} 
+				else {
+					System.out.println("Please enter a valid command.");
 				}
 				System.out.print(">> ");
 				command = br.readLine();

@@ -21,27 +21,31 @@ public class RouterThread extends Thread {
 	// If it is requesting attach, then client = true
 	// If it is receiving attach request, then client = false and I treat it like a server
 	public RouterThread(Socket socket, boolean client, Router router, RouterDescription rd, short weight) {
-		super();
+		//super();
+		// System.out.println("running inside thread constructor");
+		System.out.println("client: " + client);
 		this.socket = socket;
 		this.client = client;
 		this.router = router;
 		this.rd = rd;
 		this.weight = weight;
+	}
+
+	@Override
+	public void run() {
+		// System.out.println("running inside thread run method");
+		// If server, then prompt user to accept/deny request
+
 		try {
 			in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 			out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()));
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-	}
-
-	@Override
-	public void run() {
-		// If server, then prompt user to accept/deny request
 		if (!client) {
 			Scanner scanner = new Scanner(System.in);
-			System.out.println("received HELLO from" + socket.getInetAddress().getHostName());
-			System.out.println("Do you accept this request? (Y\\N)");
+			System.out.println("received HELLO from " + socket.getInetAddress().getHostName());
+			System.out.println("Do you accept this request? (Y/N)");
 			String input = scanner.nextLine();
 			scanner.close();
 			// Close connection if rejected
@@ -68,6 +72,7 @@ public class RouterThread extends Thread {
 	}
 
 	private void receive() {
+		//System.out.println("We are running receive in RouterThread!");
 		// If client, send simulated IP and weight
 		if (client) {
 			// Combine the two with a ',' in between
@@ -121,8 +126,8 @@ public class RouterThread extends Thread {
 	}
 
 	//TO DO: START() command
-	public void start() {
-		out.println();
-		out.flush();
-	}
+	// public void start() {
+	// 	out.println();
+	// 	out.flush();
+	// }
 }
