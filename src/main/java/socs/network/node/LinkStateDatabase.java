@@ -19,9 +19,9 @@ public class LinkStateDatabase {
   }
 
   /**
-   * output the shortest path from this router to the destination with the given IP address
+   * output the intest path from this router to the destination with the given IP address
    */
-  String getShortestPath(String destinationIP) {
+  String getintestPath(String destinationIP) {
     //TODO: fill the implementation here
     return null;
   }

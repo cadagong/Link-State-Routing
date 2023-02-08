@@ -6,6 +6,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.Scanner;
 
 public class RouterThread extends Thread {
@@ -15,20 +16,37 @@ public class RouterThread extends Thread {
 	private boolean client;
 	private Router router;
 	private RouterDescription rd;
-	private short weight;
+	private int weight;
+	private Task task;
 
-	// client here represents if the RouterThread is from a server requesting attach
-	// If it is requesting attach, then client = true
-	// If it is receiving attach request, then client = false and I treat it like a server
-	public RouterThread(Socket socket, boolean client, Router router, RouterDescription rd, short weight) {
+	// Incoming tasks from other routers
+	public RouterThread(Router router, Socket socket) {
+
+	}
+
+
+	// Locally-originating tasks without network calls
+	public RouterThread(Router router, Socket socket, Task task, RouterDescription thisRD) {
 		//super();
 		// System.out.println("running inside thread constructor");
-		System.out.println("client: " + client);
-		this.socket = socket;
-		this.client = client;
-		this.router = router;
-		this.rd = rd;
-		this.weight = weight;
+		// System.out.println("client: " + client);
+		// this.socket = socket;
+		// this.client = client;
+		// this.router = router;
+		// this.rd = rd;
+		// this.weight = weight;
+	}
+
+	// Locally-originating tasks with network calls
+	public RouterThread(Router router, Socket socket, Task task, RouterDescription thisRD, RouterDescription targetRD) {
+		//super();
+		// System.out.println("running inside thread constructor");
+		// System.out.println("client: " + client);
+		// this.socket = socket;
+		// this.client = client;
+		// this.router = router;
+		// this.rd = rd;
+		// this.weight = weight;
 	}
 
 	@Override
@@ -90,8 +108,8 @@ public class RouterThread extends Thread {
 				}
 				// Create a new RouterDescription for server and add it to the HashMap using addLink()
 				String serverIP = in.readLine();
-				RouterDescription r2 = new RouterDescription(socket.getInetAddress().getHostName(), (short) socket.getPort(), serverIP);
-				router.addLink(r2, weight);
+				RouterDescription r2 = new RouterDescription(socket.getInetAddress().getHostName(), (int) socket.getPort(), serverIP);
+				//router.addLink(r2, weight);
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -104,10 +122,10 @@ public class RouterThread extends Thread {
 				// Split the two values with ','
 				String[] parts = ipAndWeight.split(",");
 				String clientIP = parts[0];
-				short weightFromClient = Short.parseShort(parts[1]);
+				int weightFromClient = int.parseint(parts[1]);
 				// Create a new RouterDescription for client and add it to the HashMap using addLink()
-				RouterDescription r2 = new RouterDescription(socket.getInetAddress().getHostName(), (short) socket.getPort(), clientIP);
-				router.addLink(r2, weightFromClient);
+				RouterDescription r2 = new RouterDescription(socket.getInetAddress().getHostName(), (int) socket.getPort(), clientIP);
+				//router.addLink(r2, weightFromClient);
 			} catch (IOException e) {
 				e.printStackTrace();
 			}

@@ -27,8 +27,8 @@ public class Configuration {
     return _config.getInt(key);
   }
 
-  public short getShort(String key) {
-    return (short) _config.getInt(key);
+  public int getint(String key) {
+    return (int) _config.getInt(key);
   }
 
   public double getDouble(String key) {

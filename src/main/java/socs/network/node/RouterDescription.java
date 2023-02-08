@@ -3,7 +3,7 @@ package socs.network.node;
 public class RouterDescription {
 	// used to socket communication
 	String processIPAddress;
-	short processPortNumber;
+	int processPortNumber;
 	// used to identify the router in the simulated network space
 	String simulatedIPAddress;
 	// status of the router
@@ -13,7 +13,7 @@ public class RouterDescription {
 	public RouterDescription() {
 	}
 	// Create an optional constructor to fill in attributes easier
-	public RouterDescription(String processIPAddress, short processPortNumber, String simulatedIPAddress) {
+	public RouterDescription(String processIPAddress, int processPortNumber, String simulatedIPAddress) {
 		this.processIPAddress = processIPAddress;
 		this.processPortNumber = processPortNumber;
 		this.simulatedIPAddress = simulatedIPAddress;

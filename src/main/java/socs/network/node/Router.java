@@ -3,31 +3,34 @@ package socs.network.node;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.Vector;
 
 import socs.network.util.Configuration;
 
 public class Router {
 
-	protected LinkStateDatabase lsd;
+	
 	RouterDescription rd = new RouterDescription();
-	private ServerSocket serverSocket;
-	// Link[] ports = new Link[4];
+	protected LinkStateDatabase lsd = new LinkStateDatabase(rd);
 
 	// assuming that all routers are with 4 ports
 	// I changed this to HashMap so it's easier to use
-	HashMap<String,Link> ports;
+	// Link[] ports = new Link[4];
+	HashMap<String, Link> ports = new HashMap<String,Link>();
+
 
 	public Router(Configuration config) {
 		// import configuration settings
 		rd.simulatedIPAddress = config.getString("socs.network.router.ip");
-		rd.processPortNumber = config.getShort("socs.network.router.port");
-
-		lsd = new LinkStateDatabase(rd);
-		ports = new HashMap<String,Link>();
+		rd.processPortNumber = config.getint("socs.network.router.port");
 
 		// Create a new thread for the router client
 		(new Thread() {
@@ -36,18 +39,120 @@ public class Router {
 			}
 		}).start();
 
-		// Main thread is listening for incoming connections
-		requestHandler();
-	}
-	
-	// Created a method to add Links to the HashMap
-	public void addLink(RouterDescription r2, short weight) {
-		Link link = new Link(rd, r2, weight);
-		ports.put(r2.simulatedIPAddress, link);
+		// Main thread is listening for incoming requests
+		try {
+			System.out.println("Server ready!");
+			ServerSocket serverSocket = new ServerSocket(this.rd.processPortNumber);
+			while(true) {				
+				Socket socket = serverSocket.accept();
+				System.out.println("\nAccepted connection request...");
+				System.out.print(">> ");
+				(new Thread() {
+					public void run() {
+						requestHandler(socket);
+					}
+				}).start();				
+			}
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		} // 	finally {
+		// 	try {
+		// 		serverSocket.close();
+		// 	} catch (IOException e) {
+		// 		e.printStackTrace();
+		// 	}
+		// }
 	}
 
 	/**
-	 * output the shortest path to the given destination ip
+	 * process request from the remote router. For example: when router2 tries to
+	 * attach router1. Router1 can decide whether it will accept this request. The
+	 * intuition is that if router2 is an unknown/anomaly router, it is always safe
+	 * to reject the attached request from router2.
+	 */
+	private void requestHandler(Socket socket) {
+		try {
+			BufferedReader incoming = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+			PrintWriter outgoing = new PrintWriter(socket.getOutputStream(), true);
+
+			String message = incoming.readLine();
+			while (message != null) {
+                    System.out.println("\nhandling: " + "\"" + message + "\" from " + socket.getRemoteSocketAddress().toString());
+					System.out.print(">> ");
+
+					String[] messageParts = message.split(" ");
+
+					String task = messageParts[0].toLowerCase();
+					String remote_sIP = messageParts[1];
+
+					switch(task) {
+						case "attach":						
+							// if all ports are occupied
+							if(this.ports.size() == 4) {
+								outgoing.println("full");
+							}
+							// can attach successfully
+							else {
+								String remote_address = socket.getInetAddress().toString().substring(1);
+								int remote_port = Integer.valueOf(messageParts[2]);
+								int linkWeight = Integer.valueOf(messageParts[3]);
+
+								RouterDescription remote_rd = new RouterDescription(remote_address, remote_port, remote_sIP);
+								addLink(remote_rd, linkWeight, socket, outgoing, incoming);
+
+								System.out.println("\nNow attached to router " + remote_sIP);
+								System.out.println("Link weight: " + linkWeight);
+								System.out.print(">> ");
+
+								outgoing.println("success");
+							}
+							break;
+
+						case "hello":
+							Link link = this.ports.get(remote_sIP);
+							if (link != null) {
+								if (link.getConnectionStatus().equals(Link.ConnectionStatus.NONE)) {
+									link.setConnectionStatus(Link.ConnectionStatus.INIT);
+									System.out.println("\nReceived HELLO from " + remote_sIP);
+									System.out.println("\nSetting connection status to INIT");
+									System.out.print(">> ");
+
+									outgoing.println("HELLO");
+								}
+								else if (link.getConnectionStatus().equals(Link.ConnectionStatus.INIT)) {
+									link.setConnectionStatus(Link.ConnectionStatus.TWO_WAY);
+									System.out.println("\nReceived HELLO from " + remote_sIP);
+									System.out.println("\nSetting connection status to TWO_WAY");
+									System.out.print(">> ");
+								}
+							}
+							else {
+								outgoing.println("no connection");
+							}
+
+							break;
+					}
+					message = incoming.readLine();
+            }
+			socket.close();
+			System.out.println("\nSocket connection closed.");
+			System.out.print(">> ");
+		} 
+		catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+	}
+	
+	// Created a method to add Links to the HashMap
+	public synchronized void addLink(RouterDescription r2, int weight, Socket socket, PrintWriter outgoing, BufferedReader incoming) {
+		Link link = new Link(this.rd, r2, weight, socket, outgoing, incoming);
+		this.ports.put(r2.simulatedIPAddress, link);
+	}
+
+	/**
+	 * output the intest path to the given destination ip
 	 * <p/>
 	 * format: source ip address -> ip address -> ... -> destination ip
 	 *
@@ -63,7 +168,7 @@ public class Router {
 	 *
 	 * @param portNumber the port number which the link attaches at
 	 */
-	private void processDisconnect(short portNumber) {
+	private void processDisconnect(int portNumber) {
 
 	}
 
@@ -75,58 +180,101 @@ public class Router {
 	 * <p/>
 	 * NOTE: this command should not trigger link database synchronization
 	 */
-	private void processAttach(String processIP, short processPort, String simulatedIP, short weight) {
+	private void processAttach(String processIP, int processPort, String simulatedIP, int weight) {
 		if (ports.size() < 4) {
 			try {
+				if (this.ports.containsKey(simulatedIP)) {
+					System.out.println("\nERROR: This router is already attached to router " + simulatedIP);
+					System.out.print(">> ");
+					return;
+				}
+
 				// "Client" requesting attach to "Server"
-				RouterDescription outgoingRD = new RouterDescription(processIP, processPort, simulatedIP);
-				Socket clientSocket = new Socket(processIP, processPort);
-				new RouterThread(clientSocket, true, this, outgoingRD, weight).start();
-			} catch (UnknownHostException e) {
+				RouterDescription targetRD = new RouterDescription(processIP, processPort, simulatedIP);
+				Socket socket = new Socket(processIP, processPort);
+
+				PrintWriter outgoing = new PrintWriter(socket.getOutputStream(), true);
+				BufferedReader incoming = new BufferedReader(new InputStreamReader(socket.getInputStream()));			
+
+				System.out.println("\nSending attach request");
+				System.out.print(">> ");
+				String message = "attach " + this.rd.simulatedIPAddress + " " + this.rd.processPortNumber + " " + weight;
+				outgoing.println(message);
+
+				String response = incoming.readLine();
+
+				System.out.println("\nResponse: " + response);
+				System.out.print(">> ");
+
+				if (response.equals("success")) {
+					addLink(targetRD, weight, socket, outgoing, incoming);
+					System.out.println("\nSuccessfully attached to router " + simulatedIP);
+					System.out.print(">> ");
+				}
+				else if (response.equals("full")) {
+					System.out.println("\nERROR: All ports at router " + processIP + ":" + processPort + "are occupied");
+					System.out.print(">> ");
+				}
+				// socket.close();
+				// System.out.println("\nSocket connection closed.");
+				// System.out.print(">> ");
+			} 
+			catch (UnknownHostException e) {
 				e.printStackTrace();
-				System.out.println("Host unknown");
-			} catch (IOException e) {
+				System.out.println("\nHost unknown");
+			} 
+			catch (IOException e) {
 				e.printStackTrace();
 			}
 		} else {
-			System.out.println("All 4 ports are full, cannot attach");
+			System.out.println("\nAll 4 ports are full, cannot attach");
 		}
 	}
 
-	/**
-	 * process request from the remote router. For example: when router2 tries to
-	 * attach router1. Router1 can decide whether it will accept this request. The
-	 * intuition is that if router2 is an unknown/anomaly router, it is always safe
-	 * to reject the attached request from router2.
-	 */
-	private void requestHandler() {
-		try {
-			serverSocket = new ServerSocket(this.rd.processPortNumber);
-			// Might need to change this in the future
-			while (ports.size() < 4) {
-				Socket socket = serverSocket.accept();
-				// (short) -1 because as a "server" receiving attach requests,
-				// it doesn't have access to the link weight
-				System.out.println("Starting router thread");
-				new RouterThread(socket, false, this, rd, (short) -1).start();
-			}
-		} catch (IOException e) {
-			throw new RuntimeException(e);
-		} finally {
-			try {
-				serverSocket.close();
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-		}
-	}
 
 	/**
 	 * broadcast Hello to neighbors
 	 */
-	// ****TO DO*****
 	private void processStart() {
+		//Collection<Link> allLinks = this.ports.values();
 
+		for (Link link : this.ports.values()) {
+			// MIGHT WANT TO RUN ALL THIS IN SEPARATE THREAD!!
+			sendHello(link);			
+		}
+	}
+
+	private void sendHello(Link link) {
+		try {
+			String remoteSIP = link.remoteRouter.simulatedIPAddress;
+
+			System.out.println("\nSending HELLO to " + remoteSIP);
+			System.out.print(">> ");
+
+			
+			String message = "HELLO " + this.rd.simulatedIPAddress + " " + this.rd.processPortNumber;
+			link.outgoing.println(message);
+
+			String response = link.incoming.readLine();
+			if (response.equalsIgnoreCase("hello")) {
+				System.out.println("\nReceived HELLO response from " + remoteSIP);
+				System.out.println("TWO_WAY connection with " + remoteSIP + "established on both ends.");
+				System.out.println("Sending second HELLO to " + remoteSIP);
+				System.out.print(">> ");
+
+				link.setConnectionStatus(Link.ConnectionStatus.TWO_WAY);
+				link.outgoing.println(message); // resend HELLO message to tell remote that connection is two-way
+			}
+			else {
+				System.out.println("Could not establish connection with " + remoteSIP);
+				System.out.print(">> ");
+			}
+
+
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 
 	/**
@@ -137,7 +285,7 @@ public class Router {
 	 * <p/>
 	 * This command does trigger the link database synchronization
 	 */
-	private void processConnect(String processIP, short processPort, String simulatedIP, short weight) {
+	private void processConnect(String processIP, int processPort, String simulatedIP, int weight) {
 
 	}
 
@@ -145,10 +293,16 @@ public class Router {
 	 * output the neighbors of the routers
 	 */
 	private void processNeighbors() {
-		System.out.println("Router neighbors:");
-		for (String i : ports.keySet()) {
-			System.out.println(i);
+		System.out.println("\n\nROUTER NEIGHBORS:");
+		System.out.println("\n---------------------------------\n");
+		for (Link link : ports.values()) {
+			System.out.println("Router address: " + link.remoteRouter.processIPAddress + ":" + link.remoteRouter.processPortNumber);
+			System.out.println("Simulated IP: " + link.remoteRouter.simulatedIPAddress);
+			System.out.println("Link weight: " + link.weight);
+			System.out.println("Connection status: " + link.getConnectionStatus().toString());
+			System.out.println("\n---------------------------------\n");
 		}
+		System.out.print(">> ");
 	}
 
 	/**
@@ -161,8 +315,13 @@ public class Router {
 	/**
 	 * update the weight of an attached link
 	 */
-	private void updateWeight(String processIP, short processPort, String simulatedIP, short weight) {
+	private void updateWeight(String processIP, int processPort, String simulatedIP, int weight) {
 
+	}
+
+	private void printToTerminal(String string) {
+		System.out.println("\n" + string);
+		System.out.print(">> ");
 	}
 
 	public void terminal() {
@@ -173,35 +332,49 @@ public class Router {
 			System.out.print(">> ");
 			String command = br.readLine();
 			while (true) {
-				if (command.startsWith("detect ")) {
+				if (command.startsWith("attach ")) {
 					String[] cmdLine = command.split(" ");
-					processDetect(cmdLine[1]);
-				} 
-				else if (command.startsWith("disconnect ")) {
-					String[] cmdLine = command.split(" ");
-					processDisconnect(Short.parseShort(cmdLine[1]));
-				} 
-				else if (command.startsWith("attach ")) {
-					String[] cmdLine = command.split(" ");
-					processAttach(cmdLine[1], Short.parseShort(cmdLine[2]), cmdLine[3], Short.parseShort(cmdLine[4]));
-					// TO DO: START()
-				} 
+					(new Thread() {
+						public void run() {
+							String pIP = cmdLine[1];
+							int pPort = Integer.parseInt(cmdLine[2]);
+							String sIP = cmdLine[3];
+							int weight = Integer.parseInt(cmdLine[4]);
+							processAttach(pIP, pPort, sIP, weight);
+						}
+					}).start();
+					
+				}
 				else if (command.equals("start")) {
-					processStart();
-				} 
-				else if (command.equals("connect")) {
-					String[] cmdLine = command.split(" ");
-					processConnect(cmdLine[1], Short.parseShort(cmdLine[2]), cmdLine[3], Short.parseShort(cmdLine[4]));
+					(new Thread() {
+						public void run() {
+							processStart();
+						}
+					}).start();
+					
 				} 
 				else if (command.equals("neighbors")) {
-					// output neighbors
-					// DONE: theoretically
-					processNeighbors();
+					(new Thread() {
+						public void run() {
+							processNeighbors();
+						}
+					}).start();	
 				} 
+				// else if (command.startsWith("disconnect ")) {
+				// 	String[] cmdLine = command.split(" ");
+				// 	processDisconnect(int.parseint(cmdLine[1]));
+				// } 
+				// else if (command.startsWith("detect ")) {
+				// 	String[] cmdLine = command.split(" ");
+				// 	processDetect(cmdLine[1]);
+				// }  
+				// else if (command.equals("connect")) {
+				// 	String[] cmdLine = command.split(" ");
+				// 	processConnect(cmdLine[1], int.parseint(cmdLine[2]), cmdLine[3], int.parseint(cmdLine[4]));
+				// } 
 				else if (command.startsWith("quit ")) {
 					processQuit();
 					break;
-					// Theoretically done
 				} 
 				else {
 					System.out.println("Please enter a valid command.");
@@ -215,5 +388,4 @@ public class Router {
 			e.printStackTrace();
 		}
 	}
-
 }
