@@ -110,9 +110,9 @@ public class Router {
 
 						case "hello":
 							Link link = this.ports.get(remote_sIP);
+							String remote_cStatus = messageParts[2];
 							if (link != null) {
 								if (link.cStatus.equals(Link.ConnectionStatus.NONE)) {
-
 									// create socket and input/output streams for two-way communication
 									Socket two_way_socket = new Socket(link.remoteRouter.processIPAddress, link.remoteRouter.processPortNumber);
 									BufferedReader two_way_incoming = new BufferedReader(new InputStreamReader(two_way_socket.getInputStream()));
@@ -124,19 +124,23 @@ public class Router {
 
 									System.out.println("\nSetting connection status to INIT");
 									System.out.println("Sending HELLO to " + remote_sIP);
-									System.out.println(">> ");
+									System.out.print(">> ");
 
-									link.outgoing.println("HELLO " + this.rd.simulatedIPAddress);
+									// send HELLO to remote server and piggyback this router simulated IP and connection status
+									link.outgoing.println("HELLO " + this.rd.simulatedIPAddress + " " + Link.ConnectionStatus.INIT.toString());
 								}
 								else if (link.cStatus.equals(Link.ConnectionStatus.INIT)) {
 									link.setConnectionStatus(Link.ConnectionStatus.TWO_WAY);
+									System.out.println("\nSetting connection status to TWO_WAY");
+									System.out.println("Communication channel established with " + remote_sIP);
 
-									System.out.println("\nReceived HELLO from " + remote_sIP);
-									System.out.println("Setting connection status to TWO_WAY");
-									System.out.println("Sending HELLO to " + remote_sIP);
-									System.out.println(">> ");
-
-									link.outgoing.println("HELLO " + this.rd.simulatedIPAddress);
+									// if remote connection status is INIT, send back another HELLO
+									if (remote_cStatus.equalsIgnoreCase("init")) {
+										System.out.println("Sending HELLO to " + remote_sIP);
+										// send HELLO to remote server and piggyback this router simulated IP and connection status
+										link.outgoing.println("HELLO " + this.rd.simulatedIPAddress + " " + Link.ConnectionStatus.TWO_WAY.toString());
+									}
+									System.out.print(">> ");
 								}
 							}
 
@@ -276,7 +280,7 @@ public class Router {
 			System.out.println("Sending HELLO to " + remoteSIP);
 			System.out.print(">> ");
 			
-			String message = "HELLO " + this.rd.simulatedIPAddress;
+			String message = "HELLO " + this.rd.simulatedIPAddress + " " + Link.ConnectionStatus.INIT.toString();
 			link.outgoing.println(message);
 		} 
 		catch (IOException e) {
