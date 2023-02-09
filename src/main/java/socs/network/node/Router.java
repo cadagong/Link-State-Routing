@@ -187,11 +187,11 @@ public class Router {
 	}
 
 	/**
-	 * attach the link to the remote router, which is identified by the given
+	 * Attach the link to the remote router, which is identified by the given
 	 * simulated ip; to establish the connection via socket, you need to indentify
 	 * the process IP and process Port; additionally, weight is the cost to
 	 * transmitting data through the link
-	 * <p/>
+	 * 
 	 * NOTE: this command should not trigger link database synchronization
 	 */
 	private void processAttach(String processIP, int processPort, String simulatedIP, int weight) {
@@ -226,7 +226,7 @@ public class Router {
 					System.out.print(">> ");
 				}
 				else if (response.equals("full")) {
-					System.out.println("\nERROR: All ports at router " + processIP + ":" + processPort + "are occupied");
+					System.out.println("\nERROR: All ports at router " + processIP + ":" + processPort + " are occupied");
 					System.out.print(">> ");
 				}
 				socket.close();
@@ -242,6 +242,7 @@ public class Router {
 			}
 		} else {
 			System.out.println("\nAll 4 ports are full, cannot attach");
+			System.out.print(">> ");
 		}
 	}
 
@@ -265,7 +266,6 @@ public class Router {
 
 	private void initHelloProtocol(Link link) {
 		try {
-
 			String remoteSIP = link.remoteRouter.simulatedIPAddress;
 
 			// create socket and input/output streams for two-way communication
@@ -274,8 +274,6 @@ public class Router {
 			PrintWriter two_way_outgoing = new PrintWriter(two_way_socket.getOutputStream(), true);
 
 			link.setCommunicationDetails(two_way_socket, two_way_outgoing, two_way_incoming);
-
-
 			link.setConnectionStatus(Link.ConnectionStatus.INIT);	
 
 			System.out.println("\nSetting connection status to INIT");		
