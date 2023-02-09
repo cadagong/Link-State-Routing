@@ -250,14 +250,15 @@ public class Router {
 	 * broadcast Hello to neighbors
 	 */
 	private void processStart() {
-		//Collection<Link> allLinks = this.ports.values();
-
+		int newConnectionsCount = 0;
 		for (Link link : this.ports.values()) {
-			// MIGHT WANT TO RUN ALL THIS IN SEPARATE THREAD!!
-			//sendHello(link);
 			if (link.cStatus.equals(Link.ConnectionStatus.NONE)) {
 				initHelloProtocol(link);
+				newConnectionsCount++;
 			}
+		}
+		if (newConnectionsCount == 0) {
+			System.out.println("\nTwo-way communication already established with all attached routers.");
 		}
 	}
 
