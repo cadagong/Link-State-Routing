@@ -14,6 +14,13 @@ public class Link {
   BufferedReader incoming;
   ConnectionStatus cStatus;
 
+  public Link(RouterDescription r1, RouterDescription r2, int weight) {
+    localRouter = r1;
+    remoteRouter = r2;
+    this.weight = weight;
+    this.cStatus = ConnectionStatus.NONE;
+  }
+
   public Link(RouterDescription r1, RouterDescription r2, int weight, Socket socket, PrintWriter outgoing, BufferedReader incoming) {
     localRouter = r1;
     remoteRouter = r2;
@@ -24,13 +31,15 @@ public class Link {
     this.incoming = incoming;
   }
 
-  public void setConnectionStatus(ConnectionStatus cStatus) {
-		this.cStatus = cStatus;
-	}
+  public synchronized void setCommunicationDetails(Socket socket, PrintWriter outgoing, BufferedReader incoming) {
+    this.socket = socket;
+    this.outgoing = outgoing;
+    this.incoming = incoming;
+  }
 
-	public ConnectionStatus getConnectionStatus() {
-		return this.cStatus;
-	}
+  public synchronized void setConnectionStatus(Link.ConnectionStatus cStatus) {
+    this.cStatus = cStatus;
+  }
 
   public enum ConnectionStatus {
     NONE,

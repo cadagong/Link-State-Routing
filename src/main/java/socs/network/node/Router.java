@@ -98,7 +98,7 @@ public class Router {
 								int linkWeight = Integer.valueOf(messageParts[3]);
 
 								RouterDescription remote_rd = new RouterDescription(remote_address, remote_port, remote_sIP);
-								addLink(remote_rd, linkWeight, socket, outgoing, incoming);
+								addLink(remote_rd, linkWeight);
 
 								System.out.println("\nNow attached to router " + remote_sIP);
 								System.out.println("Link weight: " + linkWeight);
@@ -111,23 +111,33 @@ public class Router {
 						case "hello":
 							Link link = this.ports.get(remote_sIP);
 							if (link != null) {
-								if (link.getConnectionStatus().equals(Link.ConnectionStatus.NONE)) {
-									link.setConnectionStatus(Link.ConnectionStatus.INIT);
-									System.out.println("\nReceived HELLO from " + remote_sIP);
-									System.out.println("\nSetting connection status to INIT");
-									System.out.print(">> ");
+								if (link.cStatus.equals(Link.ConnectionStatus.NONE)) {
 
-									outgoing.println("HELLO");
+									// create socket and input/output streams for two-way communication
+									Socket two_way_socket = new Socket(link.remoteRouter.processIPAddress, link.remoteRouter.processPortNumber);
+									BufferedReader two_way_incoming = new BufferedReader(new InputStreamReader(two_way_socket.getInputStream()));
+									PrintWriter two_way_outgoing = new PrintWriter(two_way_socket.getOutputStream(), true);
+
+									link.setCommunicationDetails(two_way_socket, two_way_outgoing, two_way_incoming);
+
+									link.setConnectionStatus(Link.ConnectionStatus.INIT);
+
+									System.out.println("\nSetting connection status to INIT");
+									System.out.println("Sending HELLO to " + remote_sIP);
+									System.out.println(">> ");
+
+									link.outgoing.println("HELLO " + this.rd.simulatedIPAddress);
 								}
-								else if (link.getConnectionStatus().equals(Link.ConnectionStatus.INIT)) {
+								else if (link.cStatus.equals(Link.ConnectionStatus.INIT)) {
 									link.setConnectionStatus(Link.ConnectionStatus.TWO_WAY);
+
 									System.out.println("\nReceived HELLO from " + remote_sIP);
-									System.out.println("\nSetting connection status to TWO_WAY");
-									System.out.print(">> ");
+									System.out.println("Setting connection status to TWO_WAY");
+									System.out.println("Sending HELLO to " + remote_sIP);
+									System.out.println(">> ");
+
+									link.outgoing.println("HELLO " + this.rd.simulatedIPAddress);
 								}
-							}
-							else {
-								outgoing.println("no connection");
 							}
 
 							break;
@@ -146,8 +156,8 @@ public class Router {
 	}
 	
 	// Created a method to add Links to the HashMap
-	public synchronized void addLink(RouterDescription r2, int weight, Socket socket, PrintWriter outgoing, BufferedReader incoming) {
-		Link link = new Link(this.rd, r2, weight, socket, outgoing, incoming);
+	public synchronized void addLink(RouterDescription r2, int weight) {
+		Link link = new Link(this.rd, r2, weight);
 		this.ports.put(r2.simulatedIPAddress, link);
 	}
 
@@ -207,7 +217,7 @@ public class Router {
 				System.out.print(">> ");
 
 				if (response.equals("success")) {
-					addLink(targetRD, weight, socket, outgoing, incoming);
+					addLink(targetRD, weight);
 					System.out.println("\nSuccessfully attached to router " + simulatedIP);
 					System.out.print(">> ");
 				}
@@ -215,9 +225,9 @@ public class Router {
 					System.out.println("\nERROR: All ports at router " + processIP + ":" + processPort + "are occupied");
 					System.out.print(">> ");
 				}
-				// socket.close();
-				// System.out.println("\nSocket connection closed.");
-				// System.out.print(">> ");
+				socket.close();
+				System.out.println("\nSocket connection closed.");
+				System.out.print(">> ");
 			} 
 			catch (UnknownHostException e) {
 				e.printStackTrace();
@@ -240,38 +250,36 @@ public class Router {
 
 		for (Link link : this.ports.values()) {
 			// MIGHT WANT TO RUN ALL THIS IN SEPARATE THREAD!!
-			sendHello(link);			
+			//sendHello(link);
+			if (link.cStatus.equals(Link.ConnectionStatus.NONE)) {
+				initHelloProtocol(link);
+			}
 		}
 	}
 
-	private void sendHello(Link link) {
+	private void initHelloProtocol(Link link) {
 		try {
+
 			String remoteSIP = link.remoteRouter.simulatedIPAddress;
 
-			System.out.println("\nSending HELLO to " + remoteSIP);
+			// create socket and input/output streams for two-way communication
+			Socket two_way_socket = new Socket(link.remoteRouter.processIPAddress, link.remoteRouter.processPortNumber);
+			BufferedReader two_way_incoming = new BufferedReader(new InputStreamReader(two_way_socket.getInputStream()));
+			PrintWriter two_way_outgoing = new PrintWriter(two_way_socket.getOutputStream(), true);
+
+			link.setCommunicationDetails(two_way_socket, two_way_outgoing, two_way_incoming);
+
+
+			link.setConnectionStatus(Link.ConnectionStatus.INIT);	
+
+			System.out.println("\nSetting connection status to INIT");		
+			System.out.println("Sending HELLO to " + remoteSIP);
 			System.out.print(">> ");
-
 			
-			String message = "HELLO " + this.rd.simulatedIPAddress + " " + this.rd.processPortNumber;
+			String message = "HELLO " + this.rd.simulatedIPAddress;
 			link.outgoing.println(message);
-
-			String response = link.incoming.readLine();
-			if (response.equalsIgnoreCase("hello")) {
-				System.out.println("\nReceived HELLO response from " + remoteSIP);
-				System.out.println("TWO_WAY connection with " + remoteSIP + "established on both ends.");
-				System.out.println("Sending second HELLO to " + remoteSIP);
-				System.out.print(">> ");
-
-				link.setConnectionStatus(Link.ConnectionStatus.TWO_WAY);
-				link.outgoing.println(message); // resend HELLO message to tell remote that connection is two-way
-			}
-			else {
-				System.out.println("Could not establish connection with " + remoteSIP);
-				System.out.print(">> ");
-			}
-
-
-		} catch (IOException e) {
+		} 
+		catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
@@ -299,7 +307,7 @@ public class Router {
 			System.out.println("Router address: " + link.remoteRouter.processIPAddress + ":" + link.remoteRouter.processPortNumber);
 			System.out.println("Simulated IP: " + link.remoteRouter.simulatedIPAddress);
 			System.out.println("Link weight: " + link.weight);
-			System.out.println("Connection status: " + link.getConnectionStatus().toString());
+			System.out.println("Connection status: " + link.cStatus.toString());
 			System.out.println("\n---------------------------------\n");
 		}
 		System.out.print(">> ");
