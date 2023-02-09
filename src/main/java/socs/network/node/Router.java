@@ -259,6 +259,7 @@ public class Router {
 		}
 		if (newConnectionsCount == 0) {
 			System.out.println("\nTwo-way communication already established with all attached routers.");
+			System.out.print(">> ");
 		}
 	}
 
