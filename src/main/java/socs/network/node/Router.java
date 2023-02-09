@@ -100,8 +100,7 @@ public class Router {
 								RouterDescription remote_rd = new RouterDescription(remote_address, remote_port, remote_sIP);
 								addLink(remote_rd, linkWeight);
 
-								System.out.println("\nNow attached to router " + remote_sIP);
-								System.out.println("Link weight: " + linkWeight);
+								System.out.println("\nNow attached to router " + remote_sIP + ". Link weight: " + linkWeight);
 								System.out.print(">> ");
 
 								outgoing.println("success");
@@ -317,6 +316,14 @@ public class Router {
 		System.out.print(">> ");
 	}
 
+	private void processInfo() {
+		System.out.println("\nRouter Information:");
+		System.out.println("\nRouter IP Address: " + this.rd.processIPAddress);
+		System.out.println("Router Listening Port: " + this.rd.processPortNumber);
+		System.out.println("Router Simulated IP Address: " + this.rd.simulatedIPAddress);
+		System.out.print(">> ");
+	}
+
 	/**
 	 * disconnect with all neighbors and quit the program
 	 */
@@ -369,6 +376,13 @@ public class Router {
 					(new Thread() {
 						public void run() {
 							processNeighbors();
+						}
+					}).start();	
+				}
+				else if (command.equals("info")) {
+					(new Thread() {
+						public void run() {
+							processInfo();
 						}
 					}).start();	
 				} 
