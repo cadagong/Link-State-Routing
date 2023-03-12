@@ -1,6 +1,8 @@
 package socs.network.node;
 
 import java.io.BufferedReader;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
 
@@ -10,8 +12,8 @@ public class Link {
   RouterDescription remoteRouter;
   int weight;
   Socket socket;
-  PrintWriter outgoing;
-  BufferedReader incoming;
+  ObjectOutputStream outgoing;
+  ObjectInputStream incoming;
   ConnectionStatus cStatus;
 
   public Link(RouterDescription r1, RouterDescription r2, int weight) {
@@ -21,7 +23,7 @@ public class Link {
     this.cStatus = ConnectionStatus.NONE;
   }
 
-  public Link(RouterDescription r1, RouterDescription r2, int weight, Socket socket, PrintWriter outgoing, BufferedReader incoming) {
+  public Link(RouterDescription r1, RouterDescription r2, int weight, Socket socket, ObjectOutputStream outgoing, ObjectInputStream incoming) {
     localRouter = r1;
     remoteRouter = r2;
     this.weight = weight;
@@ -31,7 +33,7 @@ public class Link {
     this.incoming = incoming;
   }
 
-  public synchronized void setCommunicationDetails(Socket socket, PrintWriter outgoing, BufferedReader incoming) {
+  public synchronized void setCommunicationDetails(Socket socket, ObjectOutputStream outgoing, ObjectInputStream incoming) {
     this.socket = socket;
     this.outgoing = outgoing;
     this.incoming = incoming;

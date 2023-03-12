@@ -3,29 +3,26 @@ package socs.network.node;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
-import java.util.Vector;
 
+import socs.network.message.SOSPFPacket;
 import socs.network.util.Configuration;
 
 public class Router {
 
-	
 	RouterDescription rd = new RouterDescription();
 	protected LinkStateDatabase lsd;
 
 	// assuming that all routers are with 4 ports
 	// I changed this to HashMap so it's easier to use
 	// Link[] ports = new Link[4];
-	HashMap<String, Link> ports = new HashMap<String,Link>();
-
+	HashMap<String, Link> ports = new HashMap<String, Link>();
 
 	public Router(Configuration config) {
 //		System.out.println(rd);
@@ -47,25 +44,33 @@ public class Router {
 		try {
 			System.out.println("Server ready!");
 			ServerSocket serverSocket = new ServerSocket(this.rd.processPortNumber);
-			while(true) {				
+			while (true) {
 				Socket socket = serverSocket.accept();
 				System.out.println("\nAccepted connection request...");
 				System.out.print(">> ");
 				(new Thread() {
 					public void run() {
-						requestHandler(socket);
+						ObjectOutputStream outgoing = null;
+						ObjectInputStream incoming = null;
+						try {
+							incoming = new ObjectInputStream(socket.getInputStream());
+							outgoing = new ObjectOutputStream(socket.getOutputStream());
+						} catch (IOException e) {
+							e.printStackTrace();
+						}
+						requestHandler(socket, outgoing, incoming);
 					}
-				}).start();				
+				}).start();
 			}
 		} catch (IOException e) {
 			throw new RuntimeException(e);
-		} // 	finally {
-		// 	try {
-		// 		serverSocket.close();
-		// 	} catch (IOException e) {
-		// 		e.printStackTrace();
-		// 	}
-		// }
+		} // finally {
+			// try {
+			// serverSocket.close();
+			// } catch (IOException e) {
+			// e.printStackTrace();
+			// }
+			// }
 	}
 
 	/**
@@ -74,14 +79,27 @@ public class Router {
 	 * intuition is that if router2 is an unknown/anomaly router, it is always safe
 	 * to reject the attached request from router2.
 	 */
-	private void requestHandler(Socket socket) {
+	private void requestHandler(Socket socket, ObjectOutputStream outgoing, ObjectInputStream incoming) {
 		try {
-			BufferedReader incoming = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-			PrintWriter outgoing = new PrintWriter(socket.getOutputStream(), true);
+//			BufferedReader incoming = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+//			PrintWriter outgoing = new PrintWriter(socket.getOutputStream(), true);
+//			ObjectOutputStream outgoing = new ObjectOutputStream(socket.getOutputStream());
+//			ObjectInputStream incoming = new ObjectInputStream(socket.getInputStream());
 
-			String message = incoming.readLine();
-			while (message != null) {
-                    System.out.println("\nhandling: " + "\"" + message + "\" from " + socket.getRemoteSocketAddress().toString());
+			SOSPFPacket packet = null;
+			try {
+				packet = (SOSPFPacket) incoming.readObject();
+			} catch (ClassNotFoundException e1) {
+				e1.printStackTrace();
+			}
+//			String message = incoming.readLine();
+			while (packet != null) {
+				if (packet.sospfType == 1) {
+
+				} else if (packet.sospfType == 0) {
+					String message = packet.message;
+					System.out.println(
+							"\nhandling: " + "\"" + message + "\" from " + socket.getRemoteSocketAddress().toString());
 					System.out.print(">> ");
 
 					String[] messageParts = message.split(" ");
@@ -89,75 +107,89 @@ public class Router {
 					String task = messageParts[0].toLowerCase();
 					String remote_sIP = messageParts[1];
 
-					switch(task) {
-						case "attach":						
-							// if all ports are occupied
-							if(this.ports.size() == 4) {
-								outgoing.println("full");
-							}
-							// can attach successfully
-							else {
-								String remote_address = socket.getInetAddress().toString().substring(1);
-								int remote_port = Integer.valueOf(messageParts[2]);
-								int linkWeight = Integer.valueOf(messageParts[3]);
+					switch (task) {
+					case "attach":
+						// if all ports are occupied
+						if (this.ports.size() == 4) {
+							outgoing.writeObject(new SOSPFPacket("full"));
+//							outgoing.flush();
+						}
+						// can attach successfully
+						else {
+							String remote_address = socket.getInetAddress().toString().substring(1);
+							int remote_port = Integer.valueOf(messageParts[2]);
+							int linkWeight = Integer.valueOf(messageParts[3]);
 
-								RouterDescription remote_rd = new RouterDescription(remote_address, remote_port, remote_sIP);
-								Link link = addLink(remote_rd, linkWeight);
-								link.setCommunicationDetails(socket, outgoing, incoming);		
-								
-								System.out.println("\nLocal Socket Address: " + socket.getLocalPort());
+							RouterDescription remote_rd = new RouterDescription(remote_address, remote_port,
+									remote_sIP);
+							Link link = addLink(remote_rd, linkWeight);
+							link.setCommunicationDetails(socket, outgoing, incoming);
 
-								System.out.println("\nNow attached to router " + remote_sIP + ". Link weight: " + linkWeight);
+							System.out.println("\nLocal Socket Address: " + socket.getLocalPort());
+
+							System.out
+									.println("\nNow attached to router " + remote_sIP + ". Link weight: " + linkWeight);
+							System.out.print(">> ");
+
+//							outgoing.println("success");
+							outgoing.writeObject(new SOSPFPacket("success"));
+//							outgoing.flush();
+						}
+						break;
+
+					case "hello":
+						Link link = this.ports.get(remote_sIP);
+						String remote_cStatus = messageParts[2];
+						if (link != null) {
+							if (link.cStatus.equals(Link.ConnectionStatus.NONE)) {
+								link.setConnectionStatus(Link.ConnectionStatus.INIT);
+
+								System.out.println("\nSetting connection status to INIT");
+								System.out.println("Sending HELLO to " + remote_sIP);
 								System.out.print(">> ");
 
-								outgoing.println("success");
-							}
-							break;
+								// send HELLO to remote server and piggyback this router simulated IP and
+								// connection status
+								link.outgoing.writeObject(new SOSPFPacket("HELLO " + this.rd.simulatedIPAddress + " "
+										+ Link.ConnectionStatus.INIT.toString()));
+//								link.outgoing.flush();
+							} else if (link.cStatus.equals(Link.ConnectionStatus.INIT)) {
+								link.setConnectionStatus(Link.ConnectionStatus.TWO_WAY);
+								System.out.println("\nSetting connection status to TWO_WAY");
+								System.out.println("Communication channel established with " + remote_sIP);
 
-						case "hello":
-							Link link = this.ports.get(remote_sIP);
-							String remote_cStatus = messageParts[2];
-							if (link != null) {
-								if (link.cStatus.equals(Link.ConnectionStatus.NONE)) {
-									link.setConnectionStatus(Link.ConnectionStatus.INIT);
-
-									System.out.println("\nSetting connection status to INIT");
+								// if remote connection status is INIT, send back another HELLO
+								if (remote_cStatus.equalsIgnoreCase("init")) {
 									System.out.println("Sending HELLO to " + remote_sIP);
-									System.out.print(">> ");
-
-									// send HELLO to remote server and piggyback this router simulated IP and connection status
-									link.outgoing.println("HELLO " + this.rd.simulatedIPAddress + " " + Link.ConnectionStatus.INIT.toString());
+									// send HELLO to remote server and piggyback this router simulated IP and
+									// connection status
+									link.outgoing.writeObject(new SOSPFPacket("HELLO " + this.rd.simulatedIPAddress + " "
+											+ Link.ConnectionStatus.TWO_WAY.toString()));
+//									link.outgoing.flush();
+//									link.outgoing.println();
 								}
-								else if (link.cStatus.equals(Link.ConnectionStatus.INIT)) {
-									link.setConnectionStatus(Link.ConnectionStatus.TWO_WAY);
-									System.out.println("\nSetting connection status to TWO_WAY");
-									System.out.println("Communication channel established with " + remote_sIP);
-
-									// if remote connection status is INIT, send back another HELLO
-									if (remote_cStatus.equalsIgnoreCase("init")) {
-										System.out.println("Sending HELLO to " + remote_sIP);
-										// send HELLO to remote server and piggyback this router simulated IP and connection status
-										link.outgoing.println("HELLO " + this.rd.simulatedIPAddress + " " + Link.ConnectionStatus.TWO_WAY.toString());
-									}
-									System.out.print(">> ");
-								}
+								System.out.print(">> ");
 							}
+						}
 
-							break;
+						break;
 					}
-					message = incoming.readLine();
-            }
+				}
+				try {
+					packet = (SOSPFPacket) incoming.readObject();
+				} catch (ClassNotFoundException e) {
+					e.printStackTrace();
+				}
+			}
 			socket.close();
 			System.out.println("\nSocket connection closed.");
 			System.out.print(">> ");
-		} 
-		catch (IOException e) {
+		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		
-	}
 
+	}
 
 	/**
 	 * output the intest path to the given destination ip
@@ -201,15 +233,25 @@ public class Router {
 				RouterDescription targetRD = new RouterDescription(processIP, processPort, simulatedIP);
 				Socket socket = new Socket(processIP, processPort);
 
-				PrintWriter outgoing = new PrintWriter(socket.getOutputStream(), true);
-				BufferedReader incoming = new BufferedReader(new InputStreamReader(socket.getInputStream()));			
+				ObjectOutputStream outgoing = new ObjectOutputStream(socket.getOutputStream());
+				ObjectInputStream incoming = new ObjectInputStream(socket.getInputStream());
 
 				System.out.println("\nSending attach request");
 				System.out.print(">> ");
-				String message = "attach " + this.rd.simulatedIPAddress + " " + this.rd.processPortNumber + " " + weight;
-				outgoing.println(message);
+				String message = "attach " + this.rd.simulatedIPAddress + " " + this.rd.processPortNumber + " "
+						+ weight;
+				outgoing.writeObject(new SOSPFPacket(message));
+//				outgoing.flush();
 
-				String response = incoming.readLine();
+//				String response = incoming.readLine();
+				SOSPFPacket packet = null;
+				try {
+					packet = (SOSPFPacket) incoming.readObject();
+				} catch (ClassNotFoundException e) {
+					e.printStackTrace();
+				}
+				// Assuming packet can ONLY be String
+				String response = packet.message;
 
 				System.out.println("\nResponse: " + response);
 				System.out.print(">> ");
@@ -220,20 +262,18 @@ public class Router {
 					link.setConnectionStatus(Link.ConnectionStatus.INIT);
 					System.out.println("\nSuccessfully attached to router " + simulatedIP);
 					System.out.print(">> ");
-				}
-				else if (response.equals("full")) {
-					System.out.println("\nERROR: All ports at router " + processIP + ":" + processPort + " are occupied");
+				} else if (response.equals("full")) {
+					System.out
+							.println("\nERROR: All ports at router " + processIP + ":" + processPort + " are occupied");
 					System.out.print(">> ");
 				}
 
 				// call request handler for all future communication with remote router
-				requestHandler(socket);
-			} 
-			catch (UnknownHostException e) {
+				requestHandler(socket, outgoing, incoming);
+			} catch (UnknownHostException e) {
 				e.printStackTrace();
 				System.out.println("\nHost unknown");
-			} 
-			catch (IOException e) {
+			} catch (IOException e) {
 				e.printStackTrace();
 			}
 		} else {
@@ -241,7 +281,6 @@ public class Router {
 			System.out.print(">> ");
 		}
 	}
-
 
 	/**
 	 * broadcast Hello to neighbors
@@ -261,14 +300,19 @@ public class Router {
 	}
 
 	private void initHelloProtocol(Link link) {
-		String remoteSIP = link.remoteRouter.simulatedIPAddress;	
+		String remoteSIP = link.remoteRouter.simulatedIPAddress;
 
-		System.out.println("\nSetting connection status to INIT");		
+		System.out.println("\nSetting connection status to INIT");
 		System.out.println("Sending HELLO to " + remoteSIP);
 		System.out.print(">> ");
-		
+
 		String message = "HELLO " + this.rd.simulatedIPAddress + " " + Link.ConnectionStatus.INIT.toString();
-		link.outgoing.println(message);
+		try {
+			link.outgoing.writeObject(new SOSPFPacket(message));
+//			link.outgoing.flush();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 
 	/**
@@ -290,7 +334,8 @@ public class Router {
 		System.out.println("\n\nROUTER NEIGHBORS:");
 		System.out.println("\n---------------------------------\n");
 		for (Link link : ports.values()) {
-			System.out.println("Router address: " + link.remoteRouter.processIPAddress + ":" + link.remoteRouter.processPortNumber);
+			System.out.println("Router address: " + link.remoteRouter.processIPAddress + ":"
+					+ link.remoteRouter.processPortNumber);
 			System.out.println("Simulated IP: " + link.remoteRouter.simulatedIPAddress);
 			System.out.println("Link weight: " + link.weight);
 			System.out.println("Connection status: " + link.cStatus.toString());
@@ -321,9 +366,9 @@ public class Router {
 
 	}
 
-	//------------------------------------------------//
+	// ------------------------------------------------//
 	// UTILITY FUNCTIONS
-	//------------------------------------------------//
+	// ------------------------------------------------//
 
 	private void printToTerminal(String string) {
 		System.out.println("\n" + string);
@@ -338,17 +383,15 @@ public class Router {
 		return link;
 	}
 
-
-
-	//------------------------------------------------//
+	// ------------------------------------------------//
 	// ROUTER CLIENT
-	//------------------------------------------------//
+	// ------------------------------------------------//
 
 	public void terminal() {
 		try {
 			InputStreamReader isReader = new InputStreamReader(System.in);
 			BufferedReader br = new BufferedReader(isReader);
-			
+
 			System.out.print(">> ");
 			String command = br.readLine();
 			while (true) {
@@ -363,47 +406,44 @@ public class Router {
 							processAttach(pIP, pPort, sIP, weight);
 						}
 					}).start();
-					
-				}
-				else if (command.equals("start")) {
+
+				} else if (command.equals("start")) {
 					(new Thread() {
 						public void run() {
 							processStart();
 						}
 					}).start();
-					
-				} 
-				else if (command.equals("neighbors")) {
+
+				} else if (command.equals("neighbors")) {
 					(new Thread() {
 						public void run() {
 							processNeighbors();
 						}
-					}).start();	
-				}
-				else if (command.equals("info")) {
+					}).start();
+				} else if (command.equals("info")) {
 					(new Thread() {
 						public void run() {
 							processInfo();
 						}
-					}).start();	
-				} 
+					}).start();
+				}
 				// else if (command.startsWith("disconnect ")) {
-				// 	String[] cmdLine = command.split(" ");
-				// 	processDisconnect(int.parseint(cmdLine[1]));
-				// } 
+				// String[] cmdLine = command.split(" ");
+				// processDisconnect(int.parseint(cmdLine[1]));
+				// }
 				else if (command.startsWith("detect ")) {
 					String[] cmdLine = command.split(" ");
 					processDetect(cmdLine[1]);
-				}  
+				}
 				// else if (command.equals("connect")) {
-				// 	String[] cmdLine = command.split(" ");
-				// 	processConnect(cmdLine[1], int.parseint(cmdLine[2]), cmdLine[3], int.parseint(cmdLine[4]));
-				// } 
+				// String[] cmdLine = command.split(" ");
+				// processConnect(cmdLine[1], int.parseint(cmdLine[2]), cmdLine[3],
+				// int.parseint(cmdLine[4]));
+				// }
 				else if (command.startsWith("quit ")) {
 					processQuit();
 					break;
-				} 
-				else {
+				} else {
 					System.out.println("Please enter a valid command.");
 				}
 				System.out.print(">> ");
