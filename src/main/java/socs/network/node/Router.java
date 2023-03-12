@@ -10,7 +10,9 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.HashMap;
+import java.util.Vector;
 
+import socs.network.message.LSA;
 import socs.network.message.SOSPFPacket;
 import socs.network.util.Configuration;
 
@@ -94,8 +96,35 @@ public class Router {
 			}
 //			String message = incoming.readLine();
 			while (packet != null) {
-				if (packet.sospfType == 1) {
+				if (packet.sospfType == 1) { // type 1 = lsaupdate	
+					System.out.println("\nhandling: LSAUPDATE message from " + socket.getRemoteSocketAddress().toString() +
+					"with simulated IP of " + packet.srcIP);
+					System.out.print(">> ");
 
+					boolean updateOccured = false;
+
+					for (LSA incomingLSA : packet.lsaArray) {
+						String simIP = incomingLSA.linkStateID;
+						int incomingSeqNum = incomingLSA.lsaSeqNumber;
+						if ((!lsd._store.containsKey(simIP))
+							|| (lsd._store.containsKey(simIP) && (lsd._store.get(simIP).lsaSeqNumber < incomingSeqNum))) {
+								lsd._store.put(simIP, incomingLSA);
+								System.out.print("\nUpdated LSA of " + simIP + ".");
+								System.out.println("New sequence number: " + incomingSeqNum);
+								System.out.print(">> ");
+
+								updateOccured = true;
+						}
+						else {
+							System.out.print("\nIncoming LSA sequence number for " + simIP + " is " + 
+							"smaller than or equal to current sequence number --> not updating.");
+							System.out.print(">> ");
+						}
+					}
+
+					if (updateOccured) {
+						// forwardLSAUpdate(simIP);
+					}
 				} else if (packet.sospfType == 0) {
 					String message = packet.message;
 					System.out.println(
@@ -156,18 +185,22 @@ public class Router {
 							} else if (link.cStatus.equals(Link.ConnectionStatus.INIT)) {
 								link.setConnectionStatus(Link.ConnectionStatus.TWO_WAY);
 								System.out.println("\nSetting connection status to TWO_WAY");
-								System.out.println("Communication channel established with " + remote_sIP);
+								System.out.println("Communication channel established with " + remote_sIP);								
 
 								// if remote connection status is INIT, send back another HELLO
 								if (remote_cStatus.equalsIgnoreCase("init")) {
 									System.out.println("Sending HELLO to " + remote_sIP);
 									// send HELLO to remote server and piggyback this router simulated IP and
 									// connection status
-									link.outgoing.writeObject(new SOSPFPacket("HELLO " + this.rd.simulatedIPAddress + " "
-											+ Link.ConnectionStatus.TWO_WAY.toString()));
+									link.outgoing.writeObject(new SOSPFPacket("HELLO " + this.rd.simulatedIPAddress
+											+ " " + Link.ConnectionStatus.TWO_WAY.toString()));
 //									link.outgoing.flush();
 //									link.outgoing.println();
 								}
+								
+								// Send LSAUpdate to update new link with our router's LSA
+								lsaUpdate();
+								
 								System.out.print(">> ");
 							}
 						}
@@ -200,6 +233,49 @@ public class Router {
 	 */
 	private void processDetect(String destinationIP) {
 		System.out.println(lsd.getShortestPath(destinationIP));
+	}
+
+	// Make this synchronized???
+	private void lsaForward(String receivedFrom) {
+		for (String s : ports.keySet()) {
+			// Don't send new packet to the same router you received original packet from
+			if (!s.equals(receivedFrom)) {
+				Link tmp = ports.get(s);
+				Vector<LSA> lsaArray = new Vector<LSA>();
+				for (LSA lsa : lsd._store.values()) {
+					lsaArray.add(lsa);
+				}
+				// Send packet with srcIP of current router
+				SOSPFPacket outgoingLSA = new SOSPFPacket(lsaArray, rd.simulatedIPAddress);
+				try {
+					tmp.outgoing.writeObject(outgoingLSA);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+
+	private synchronized void lsaUpdate() {
+		// Construct outgoing SOSPFPacket containing Vector of LSA
+		Vector<LSA> lsaArray = new Vector<LSA>();
+//		System.out.println(lsd._store.get(rd.simulatedIPAddress).lsaSeqNumber);
+		lsd._store.get(rd.simulatedIPAddress).lsaSeqNumber++;
+//		System.out.println(lsd._store.get(rd.simulatedIPAddress).lsaSeqNumber);
+		for (LSA lsa : lsd._store.values()) {
+			lsaArray.add(lsa);
+		}
+		SOSPFPacket outgoingLSA = new SOSPFPacket(lsaArray, rd.simulatedIPAddress);
+		
+		// Loops through all the links this router is connected to
+		// and sends the SOSPFPacket
+		for (Link l : ports.values()) {
+			try {
+				l.outgoing.writeObject(outgoingLSA);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
 	}
 
 	/**
@@ -394,6 +470,7 @@ public class Router {
 
 			System.out.print(">> ");
 			String command = br.readLine();
+//			System.out.println("Here " + command);
 			while (true) {
 				if (command.startsWith("attach ")) {
 					String[] cmdLine = command.split(" ");
@@ -434,6 +511,9 @@ public class Router {
 				else if (command.startsWith("detect ")) {
 					String[] cmdLine = command.split(" ");
 					processDetect(cmdLine[1]);
+				}
+				else if (command.equals("lsaupdate")) {
+					lsaUpdate();
 				}
 				// else if (command.equals("connect")) {
 				// String[] cmdLine = command.split(" ");
