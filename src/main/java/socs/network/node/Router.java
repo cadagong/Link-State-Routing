@@ -19,7 +19,7 @@ public class Router {
 
 	
 	RouterDescription rd = new RouterDescription();
-	protected LinkStateDatabase lsd = new LinkStateDatabase(rd);
+	protected LinkStateDatabase lsd;
 
 	// assuming that all routers are with 4 ports
 	// I changed this to HashMap so it's easier to use
@@ -28,9 +28,13 @@ public class Router {
 
 
 	public Router(Configuration config) {
+//		System.out.println(rd);
+//		System.out.println(lsd);
+//		System.out.println(lsd._store);
 		// import configuration settings
 		rd.simulatedIPAddress = config.getString("socs.network.router.ip");
 		rd.processPortNumber = config.getint("socs.network.router.port");
+		lsd = new LinkStateDatabase(rd);
 
 		// Create a new thread for the router client
 		(new Thread() {
@@ -172,7 +176,7 @@ public class Router {
 	 * @param destinationIP the ip adderss of the destination simulated router
 	 */
 	private void processDetect(String destinationIP) {
-
+		System.out.println(lsd.getShortestPath(destinationIP));
 	}
 
 	/**
@@ -390,10 +394,10 @@ public class Router {
 				// 	String[] cmdLine = command.split(" ");
 				// 	processDisconnect(int.parseint(cmdLine[1]));
 				// } 
-				// else if (command.startsWith("detect ")) {
-				// 	String[] cmdLine = command.split(" ");
-				// 	processDetect(cmdLine[1]);
-				// }  
+				else if (command.startsWith("detect ")) {
+					String[] cmdLine = command.split(" ");
+					processDetect(cmdLine[1]);
+				}  
 				// else if (command.equals("connect")) {
 				// 	String[] cmdLine = command.split(" ");
 				// 	processConnect(cmdLine[1], int.parseint(cmdLine[2]), cmdLine[3], int.parseint(cmdLine[4]));
