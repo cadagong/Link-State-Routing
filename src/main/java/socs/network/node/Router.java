@@ -292,6 +292,11 @@ public class Router {
 				initHelloProtocol(link);
 				newConnectionsCount++;
 			}
+			else if (link.cStatus.equals(Link.ConnectionStatus.NONE)) {
+				link.setConnectionStatus(Link.ConnectionStatus.INIT);
+				initHelloProtocol(link);
+				newConnectionsCount++;
+			}
 		}
 		if (newConnectionsCount == 0) {
 			System.out.println("\nTwo-way communication already established with all attached routers.");
