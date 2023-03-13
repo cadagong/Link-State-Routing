@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.Vector;
 
 import socs.network.message.LSA;
+import socs.network.message.LinkDescription;
 import socs.network.message.SOSPFPacket;
 import socs.network.util.Configuration;
 
@@ -96,9 +97,9 @@ public class Router {
 			}
 //			String message = incoming.readLine();
 			while (packet != null) {
-				if (packet.sospfType == 1) { // type 1 = lsaupdate	
-					System.out.println("\nhandling: LSAUPDATE message from " + socket.getRemoteSocketAddress().toString() +
-					"with simulated IP of " + packet.srcIP);
+				if (packet.sospfType == 1) { // type 1 = lsaupdate
+					System.out.println("\nhandling: LSAUPDATE message from "
+							+ socket.getRemoteSocketAddress().toString() + "with simulated IP of " + packet.srcIP);
 					System.out.print(">> ");
 
 					boolean updateOccured = false;
@@ -106,24 +107,24 @@ public class Router {
 					for (LSA incomingLSA : packet.lsaArray) {
 						String simIP = incomingLSA.linkStateID;
 						int incomingSeqNum = incomingLSA.lsaSeqNumber;
-						if ((!lsd._store.containsKey(simIP))
-							|| (lsd._store.containsKey(simIP) && (lsd._store.get(simIP).lsaSeqNumber < incomingSeqNum))) {
-								lsd._store.put(simIP, incomingLSA);
-								System.out.print("\nUpdated LSA of " + simIP + ".");
-								System.out.println("New sequence number: " + incomingSeqNum);
-								System.out.print(">> ");
+						if ((!lsd._store.containsKey(simIP)) || (lsd._store.containsKey(simIP)
+								&& (lsd._store.get(simIP).lsaSeqNumber < incomingSeqNum))) {
+							lsd._store.put(simIP, incomingLSA);
+							System.out.print("\nUpdated LSA of " + simIP + ".");
+							System.out.println("New sequence number: " + incomingSeqNum);
+							System.out.print(">> ");
 
-								updateOccured = true;
-						}
-						else {
-							System.out.print("\nIncoming LSA sequence number for " + simIP + " is " + 
-							"smaller than or equal to current sequence number --> not updating.");
+							updateOccured = true;
+						} else {
+							System.out.print("\nIncoming LSA sequence number for " + simIP + " is "
+									+ "smaller than or equal to current sequence number --> not updating.");
 							System.out.print(">> ");
 						}
 					}
 
 					if (updateOccured) {
-						// forwardLSAUpdate(simIP);
+//						System.out.println();
+						lsaForward(packet.srcIP);
 					}
 				} else if (packet.sospfType == 0) {
 					String message = packet.message;
@@ -185,7 +186,7 @@ public class Router {
 							} else if (link.cStatus.equals(Link.ConnectionStatus.INIT)) {
 								link.setConnectionStatus(Link.ConnectionStatus.TWO_WAY);
 								System.out.println("\nSetting connection status to TWO_WAY");
-								System.out.println("Communication channel established with " + remote_sIP);								
+								System.out.println("Communication channel established with " + remote_sIP);
 
 								// if remote connection status is INIT, send back another HELLO
 								if (remote_cStatus.equalsIgnoreCase("init")) {
@@ -198,9 +199,12 @@ public class Router {
 //									link.outgoing.println();
 								}
 								
+								LinkDescription ld = new LinkDescription(link.remoteRouter.simulatedIPAddress, link.remoteRouter.processPortNumber, link.weight);
+								lsd._store.get(rd.simulatedIPAddress).links.add(ld);
 								// Send LSAUpdate to update new link with our router's LSA
+								System.out.println(rd.processPortNumber + "LSAUPDATE");
 								lsaUpdate();
-								
+
 								System.out.print(">> ");
 							}
 						}
@@ -266,7 +270,7 @@ public class Router {
 			lsaArray.add(lsa);
 		}
 		SOSPFPacket outgoingLSA = new SOSPFPacket(lsaArray, rd.simulatedIPAddress);
-		
+
 		// Loops through all the links this router is connected to
 		// and sends the SOSPFPacket
 		for (Link l : ports.values()) {
@@ -516,8 +520,7 @@ public class Router {
 				else if (command.startsWith("detect ")) {
 					String[] cmdLine = command.split(" ");
 					processDetect(cmdLine[1]);
-				}
-				else if (command.equals("lsaupdate")) {
+				} else if (command.equals("lsaupdate")) {
 					lsaUpdate();
 				}
 				// else if (command.equals("connect")) {
