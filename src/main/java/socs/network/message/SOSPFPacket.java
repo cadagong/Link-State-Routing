@@ -32,5 +32,11 @@ public class SOSPFPacket implements Serializable {
 	  this.message = message;
   }
   
+  public SOSPFPacket(Vector<LSA> lsaVector, String srcIP) {
+	  this.sospfType = 1;
+	  this.lsaArray = lsaVector;
+	  this.srcIP = srcIP;
+  }
+  
 
 }
