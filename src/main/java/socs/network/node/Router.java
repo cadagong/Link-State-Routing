@@ -107,6 +107,13 @@ public class Router {
 					for (LSA incomingLSA : packet.lsaArray) {
 						String simIP = incomingLSA.linkStateID;
 						int incomingSeqNum = incomingLSA.lsaSeqNumber;
+						if (lsd._store.get(simIP) != null) {
+							System.out.println("Current " + simIP + lsd._store.get(simIP).lsaSeqNumber);
+						} else {
+							System.out.println("Currently no " + simIP + "in lsd");
+						}
+
+						System.out.println("New " + simIP + incomingLSA.lsaSeqNumber);
 						if ((!lsd._store.containsKey(simIP)) || (lsd._store.containsKey(simIP)
 								&& (lsd._store.get(simIP).lsaSeqNumber < incomingSeqNum))) {
 							lsd._store.put(simIP, incomingLSA);
@@ -263,19 +270,26 @@ public class Router {
 	private synchronized void lsaUpdate() {
 		// Construct outgoing SOSPFPacket containing Vector of LSA
 		Vector<LSA> lsaArray = new Vector<LSA>();
-//		System.out.println(lsd._store.get(rd.simulatedIPAddress).lsaSeqNumber);
+		System.out.println(lsd._store.get(rd.simulatedIPAddress).lsaSeqNumber);
 		lsd._store.get(rd.simulatedIPAddress).lsaSeqNumber++;
-//		System.out.println(lsd._store.get(rd.simulatedIPAddress).lsaSeqNumber);
+		System.out.println(lsd._store.get(rd.simulatedIPAddress).lsaSeqNumber);
 		for (LSA lsa : lsd._store.values()) {
+			if (lsa.linkStateID.equals(rd.simulatedIPAddress)) {
+				System.out.println(rd.simulatedIPAddress + ":" + lsa.lsaSeqNumber);
+			}
 			lsaArray.add(lsa);
 		}
 		SOSPFPacket outgoingLSA = new SOSPFPacket(lsaArray, rd.simulatedIPAddress);
+		for (LSA lsa : outgoingLSA.lsaArray) {
+			System.out.println(lsa.linkStateID + " - " + lsa.lsaSeqNumber);
+		}
 
 		// Loops through all the links this router is connected to
 		// and sends the SOSPFPacket
 		for (Link l : ports.values()) {
 			try {
 				l.outgoing.writeObject(outgoingLSA);
+				l.outgoing.reset();
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
