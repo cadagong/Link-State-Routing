@@ -4,7 +4,7 @@ In this project, we developped a pure user-space program which simulates the maj
 The links connecting the routers/hosts and the IP addresses identifying the routers/hosts are simulated by in-memory data structures.
 
 ### Command-Line Client Commands
-1. **Attach**
+1. **Attach <IP Address> <Port Number> <Simulated IP Address> <Link Weight>**
 - R1 sends an attach request to R2. 
 - R2 accepts the request if it's ports are not full.
 
@@ -20,7 +20,7 @@ The links connecting the routers/hosts and the IP addresses identifying the rout
 - R2 forwards the LSD it recieved from R1 to any other routers it is attached to, which in turn do the same.
 - R2 also sends it's LSD back to R1 so that R1 can update it's information (since it just started and doesn't have the latest routing information).
 
-3. **Detect**
+3. **Detect <Simulated IP Address>**
 - Router runs Dijkstra's Algorithm on it's LSD to determine the shortest path to the router with the simulated IP address of interest.
 - No network communication occurs as a result of this command.
 
