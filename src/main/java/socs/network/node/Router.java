@@ -9,7 +9,9 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Vector;
 
 import socs.network.message.LSA;
@@ -25,7 +27,7 @@ public class Router {
 	// assuming that all routers are with 4 ports
 	// I changed this to HashMap so it's easier to use
 	// Link[] ports = new Link[4];
-	HashMap<String, Link> ports = new HashMap<String, Link>();
+	LinkedHashMap<String, Link> ports = new LinkedHashMap<String, Link>();
 
 	public Router(Configuration config) {
 
@@ -189,6 +191,7 @@ public class Router {
 								}
 								
 								LinkDescription ld = new LinkDescription(link.remoteRouter.simulatedIPAddress, link.remoteRouter.processPortNumber, link.weight);
+								System.out.println();
 								lsd._store.get(rd.simulatedIPAddress).links.add(ld);
 								// Send LSAUpdate to update new link with our router's LSA
 								lsaUpdate();
@@ -197,6 +200,39 @@ public class Router {
 							}
 						}
 
+						break;
+						
+					case "disconnect":
+						Link linkDisconnect = this.ports.get(remote_sIP);
+						for (LinkDescription i: lsd._store.get(rd.simulatedIPAddress).links) {
+							if (i.linkID.equals(remote_sIP)) {
+								lsd._store.get(rd.simulatedIPAddress).links.remove(i);
+								break;
+							}
+						}
+
+						lsaUpdate();
+						
+						System.out.println("\nSending disconnect acknowledgement to " + remote_sIP);
+						System.out.print(">> ");
+						try {
+							linkDisconnect.outgoing.writeObject(new SOSPFPacket("acknowledge " + rd.simulatedIPAddress + " "));
+						} catch (IOException e4) {
+							e4.printStackTrace();
+						}
+//						linkDisconnect.incoming.close();
+//						linkDisconnect.outgoing.close();
+						this.ports.remove(remote_sIP);
+						
+						break;
+					
+					case "acknowledge":
+						System.out.println("\nReceived disconnect acknowledgement from " + remote_sIP);
+						System.out.print(">> ");
+//						this.ports.get(remote_sIP).outgoing.close();
+//						this.ports.get(remote_sIP).incoming.close();
+						this.ports.remove(remote_sIP);
+						
 						break;
 					}
 				}
@@ -278,8 +314,72 @@ public class Router {
 	 *
 	 * @param portNumber the port number which the link attaches at
 	 */
-	private void processDisconnect(int portNumber) {
+	private synchronized void processDisconnect(int portNumber) {
+		if (portNumber < 0 || portNumber > 3) {
+			System.out.println("Invalid range. Only ports 0 to 3 are valid");
+			return;
+		}
+		if (ports.size() - 1 < portNumber) {
+			System.out.println("Port " + portNumber + "does not exist");
+			return;
+		}
+//		List<Link> linkList = new ArrayList<Link>(ports.values());
+//		for (int i = 0; i < ports.values())
+		portNumber = portNumber + 1;
+		System.out.println("Here");
+		System.out.println(lsd._store.get(rd.simulatedIPAddress).links.get(portNumber));
+		System.out.println(lsd._store.get(rd.simulatedIPAddress).links.get(portNumber).linkID);
+		String remoteIP = lsd._store.get(rd.simulatedIPAddress).links.get(portNumber).linkID;
+		System.out.println(remoteIP);
+		System.out.println(ports.get(remoteIP));
+		System.out.println(ports.get(remoteIP).incoming);
+		lsd._store.get(rd.simulatedIPAddress).links.remove(portNumber);
+		lsaUpdate();
 		
+		try {
+			Thread.sleep(200);
+		} catch (InterruptedException e3) {
+			e3.printStackTrace();
+		}
+		
+		System.out.println("\nSending disconnect request");
+		System.out.print(">> ");
+		String message = "disconnect " + this.rd.simulatedIPAddress + " ";
+		try {
+			ports.get(remoteIP).outgoing.writeObject(new SOSPFPacket(message));
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		}
+
+//		SOSPFPacket packet = null;
+//		try {
+//			packet = (SOSPFPacket) ports.get(remoteIP).incoming.readObject();
+//		}
+//		catch (ClassNotFoundException e) {
+//			e.printStackTrace();
+//		}
+//		catch (IOException e2) {
+//			e2.printStackTrace();
+//		}
+//		// Assuming packet can ONLY be String
+//		String response = packet.message;
+//
+//		System.out.println("\nResponse: " + response);
+//		System.out.print(">> ");
+//
+//		if (response.equals("acknowledged")) {
+//			try {
+//				ports.get(remoteIP).outgoing.close();
+//				ports.get(remoteIP).incoming.close();
+//			} catch (IOException e) {
+//				e.printStackTrace();
+//			}
+//			ports.remove(remoteIP);
+//		} else {
+//			System.out
+//					.println("\nERROR: Invalid disconnect response from remote router: " + remoteIP);
+//			System.out.print(">> ");
+//		}
 	}
 
 	/**
@@ -523,10 +623,10 @@ public class Router {
 						}
 					}).start();
 				}
-				// else if (command.startsWith("disconnect ")) {
-				// String[] cmdLine = command.split(" ");
-				// processDisconnect(int.parseint(cmdLine[1]));
-				// }
+				 else if (command.startsWith("disconnect ")) {
+					 String[] cmdLine = command.split(" ");
+					 processDisconnect(Integer.parseInt(cmdLine[1]));
+				 }
 				else if (command.startsWith("detect ")) {
 					String[] cmdLine = command.split(" ");
 					processDetect(cmdLine[1]);

@@ -1,6 +1,7 @@
 package socs.network.message;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.LinkedList;
 
 public class LSA implements Serializable {
@@ -9,7 +10,7 @@ public class LSA implements Serializable {
   public String linkStateID;
   public int lsaSeqNumber = Integer.MIN_VALUE;
 
-  public LinkedList<LinkDescription> links = new LinkedList<LinkDescription>();
+  public ArrayList<LinkDescription> links = new ArrayList<LinkDescription>();
 
   @Override
   public String toString() {
