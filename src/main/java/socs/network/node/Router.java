@@ -1,6 +1,7 @@
 package socs.network.node;
 
 import java.io.BufferedReader;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
@@ -64,8 +65,7 @@ public class Router {
 					}
 				}).start();
 			}
-		}
-		catch (IOException e) {
+		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
 	}
@@ -81,8 +81,7 @@ public class Router {
 			SOSPFPacket packet = null;
 			try {
 				packet = (SOSPFPacket) incoming.readObject();
-			}
-			catch (ClassNotFoundException e1) {
+			} catch (ClassNotFoundException e1) {
 				e1.printStackTrace();
 			}
 
@@ -97,8 +96,9 @@ public class Router {
 					for (LSA incomingLSA : packet.lsaArray) {
 						String simIP = incomingLSA.linkStateID;
 						int incomingSeqNum = incomingLSA.lsaSeqNumber;
+						
 
-						//System.out.println("New " + simIP + incomingLSA.lsaSeqNumber);
+						// System.out.println("New " + simIP + incomingLSA.lsaSeqNumber);
 						if ((!lsd._store.containsKey(simIP)) || (lsd._store.containsKey(simIP)
 								&& (lsd._store.get(simIP).lsaSeqNumber < incomingSeqNum))) {
 
@@ -109,13 +109,12 @@ public class Router {
 							lsd._store.put(simIP, incomingLSA);
 
 							System.out.println("\nUpdated LSA of " + simIP + ". ");
-							//System.out.println("Old sequence number: " + oldSeqNum);
+							// System.out.println("Old sequence number: " + oldSeqNum);
 							System.out.println("New sequence number: " + incomingSeqNum);
 							System.out.print(">> ");
 
 							updateOccured = true;
-						} 
-						else {
+						} else {
 							System.out.println("\nIncoming LSA sequence number for " + simIP + " is "
 									+ "smaller than or equal to current sequence number --> not updating.");
 							System.out.print(">> ");
@@ -125,10 +124,15 @@ public class Router {
 					if (updateOccured) {
 						lsaForward(packet.srcIP);
 					}
-				}
-				else if (packet.sospfType == 0) {
+//					for (LSA lsa : lsd._store.values()) {
+//						if (lsa.links.size() == 1) {
+//							lsd._store.remove(lsa.linkStateID);
+//						}
+//					}
+				} else if (packet.sospfType == 0) {
 					String message = packet.message;
-					System.out.println("\nhandling: " + "\"" + message + "\" from " + socket.getRemoteSocketAddress().toString());
+					System.out.println(
+							"\nhandling: " + "\"" + message + "\" from " + socket.getRemoteSocketAddress().toString());
 					System.out.print(">> ");
 
 					String[] messageParts = message.split(" ");
@@ -155,7 +159,8 @@ public class Router {
 
 							System.out.println("\nLocal Socket Address: " + socket.getLocalPort());
 
-							System.out.println("\nNow attached to router " + remote_sIP + ". Link weight: " + linkWeight);
+							System.out
+									.println("\nNow attached to router " + remote_sIP + ". Link weight: " + linkWeight);
 							System.out.print(">> ");
 
 							outgoing.writeObject(new SOSPFPacket("success"));
@@ -177,8 +182,7 @@ public class Router {
 								// connection status
 								link.outgoing.writeObject(new SOSPFPacket("HELLO " + this.rd.simulatedIPAddress + " "
 										+ Link.ConnectionStatus.INIT.toString()));
-							} 
-							else if (link.cStatus.equals(Link.ConnectionStatus.INIT)) {
+							} else if (link.cStatus.equals(Link.ConnectionStatus.INIT)) {
 								link.setConnectionStatus(Link.ConnectionStatus.TWO_WAY);
 								System.out.println("\nSetting connection status to TWO_WAY");
 								System.out.println("Communication channel established with " + remote_sIP);
@@ -189,8 +193,9 @@ public class Router {
 									link.outgoing.writeObject(new SOSPFPacket("HELLO " + this.rd.simulatedIPAddress
 											+ " " + Link.ConnectionStatus.TWO_WAY.toString()));
 								}
-								
-								LinkDescription ld = new LinkDescription(link.remoteRouter.simulatedIPAddress, link.remoteRouter.processPortNumber, link.weight);
+
+								LinkDescription ld = new LinkDescription(link.remoteRouter.simulatedIPAddress,
+										link.remoteRouter.processPortNumber, link.weight);
 								System.out.println();
 								lsd._store.get(rd.simulatedIPAddress).links.add(ld);
 								// Send LSAUpdate to update new link with our router's LSA
@@ -201,10 +206,10 @@ public class Router {
 						}
 
 						break;
-						
+
 					case "disconnect":
 						Link linkDisconnect = this.ports.get(remote_sIP);
-						for (LinkDescription i: lsd._store.get(rd.simulatedIPAddress).links) {
+						for (LinkDescription i : lsd._store.get(rd.simulatedIPAddress).links) {
 							if (i.linkID.equals(remote_sIP)) {
 								lsd._store.get(rd.simulatedIPAddress).links.remove(i);
 								break;
@@ -212,42 +217,39 @@ public class Router {
 						}
 
 						lsaUpdate();
-						
+
 						System.out.println("\nSending disconnect acknowledgement to " + remote_sIP);
 						System.out.print(">> ");
 						try {
-							linkDisconnect.outgoing.writeObject(new SOSPFPacket("acknowledge " + rd.simulatedIPAddress + " "));
+							linkDisconnect.outgoing
+									.writeObject(new SOSPFPacket("acknowledge " + rd.simulatedIPAddress + " "));
 						} catch (IOException e4) {
 							e4.printStackTrace();
 						}
-//						linkDisconnect.incoming.close();
-//						linkDisconnect.outgoing.close();
 						this.ports.remove(remote_sIP);
-						
+
 						break;
-					
+
 					case "acknowledge":
 						System.out.println("\nReceived disconnect acknowledgement from " + remote_sIP);
 						System.out.print(">> ");
-//						this.ports.get(remote_sIP).outgoing.close();
-//						this.ports.get(remote_sIP).incoming.close();
 						this.ports.remove(remote_sIP);
-						
+
 						break;
 					}
 				}
 				try {
 					packet = (SOSPFPacket) incoming.readObject();
-				}
-				catch (ClassNotFoundException e) {
+				} catch (ClassNotFoundException e) {
 					e.printStackTrace();
+//				} catch (EOFException e5) {
+//					
 				}
 			}
 			socket.close();
 			System.out.println("\nSocket connection closed.");
 			System.out.print(">> ");
-		}
-		catch (IOException e) {
+		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
@@ -323,25 +325,19 @@ public class Router {
 			System.out.println("Port " + portNumber + "does not exist");
 			return;
 		}
-//		List<Link> linkList = new ArrayList<Link>(ports.values());
-//		for (int i = 0; i < ports.values())
-		portNumber = portNumber + 1;
-		System.out.println("Here");
-		System.out.println(lsd._store.get(rd.simulatedIPAddress).links.get(portNumber));
-		System.out.println(lsd._store.get(rd.simulatedIPAddress).links.get(portNumber).linkID);
-		String remoteIP = lsd._store.get(rd.simulatedIPAddress).links.get(portNumber).linkID;
-		System.out.println(remoteIP);
-		System.out.println(ports.get(remoteIP));
-		System.out.println(ports.get(remoteIP).incoming);
-		lsd._store.get(rd.simulatedIPAddress).links.remove(portNumber);
-		lsaUpdate();
-		
-		try {
-			Thread.sleep(200);
-		} catch (InterruptedException e3) {
-			e3.printStackTrace();
+		List<Link> linkList = new ArrayList<Link>(ports.values());
+		Link link = linkList.get(portNumber);
+		String remoteIP = link.remoteRouter.simulatedIPAddress;
+		if (link.cStatus == Link.ConnectionStatus.TWO_WAY) {
+			portNumber = portNumber + 1;
+			lsd._store.get(rd.simulatedIPAddress).links.remove(portNumber);
+			lsaUpdate();
+			try {
+				Thread.sleep(200);
+			} catch (InterruptedException e3) {
+				e3.printStackTrace();
+			}
 		}
-		
 		System.out.println("\nSending disconnect request");
 		System.out.print(">> ");
 		String message = "disconnect " + this.rd.simulatedIPAddress + " ";
@@ -351,35 +347,6 @@ public class Router {
 			e1.printStackTrace();
 		}
 
-//		SOSPFPacket packet = null;
-//		try {
-//			packet = (SOSPFPacket) ports.get(remoteIP).incoming.readObject();
-//		}
-//		catch (ClassNotFoundException e) {
-//			e.printStackTrace();
-//		}
-//		catch (IOException e2) {
-//			e2.printStackTrace();
-//		}
-//		// Assuming packet can ONLY be String
-//		String response = packet.message;
-//
-//		System.out.println("\nResponse: " + response);
-//		System.out.print(">> ");
-//
-//		if (response.equals("acknowledged")) {
-//			try {
-//				ports.get(remoteIP).outgoing.close();
-//				ports.get(remoteIP).incoming.close();
-//			} catch (IOException e) {
-//				e.printStackTrace();
-//			}
-//			ports.remove(remoteIP);
-//		} else {
-//			System.out
-//					.println("\nERROR: Invalid disconnect response from remote router: " + remoteIP);
-//			System.out.print(">> ");
-//		}
 	}
 
 	/**
@@ -408,15 +375,14 @@ public class Router {
 
 				System.out.println("\nSending attach request");
 				System.out.print(">> ");
-				String message = "attach " + this.rd.simulatedIPAddress + " " +
-					this.rd.processPortNumber + " " + weight;
+				String message = "attach " + this.rd.simulatedIPAddress + " " + this.rd.processPortNumber + " "
+						+ weight;
 				outgoing.writeObject(new SOSPFPacket(message));
 
 				SOSPFPacket packet = null;
 				try {
 					packet = (SOSPFPacket) incoming.readObject();
-				}
-				catch (ClassNotFoundException e) {
+				} catch (ClassNotFoundException e) {
 					e.printStackTrace();
 				}
 				// Assuming packet can ONLY be String
@@ -453,17 +419,14 @@ public class Router {
 						e.printStackTrace();
 					}
 				}
-				
-			}
-			catch (UnknownHostException e) {
+
+			} catch (UnknownHostException e) {
 				e.printStackTrace();
 				System.out.println("\nHost unknown");
-			}
-			catch (IOException e) {
+			} catch (IOException e) {
 				e.printStackTrace();
 			}
-		}
-		else {
+		} else {
 			System.out.println("\nAll 4 ports are full, cannot attach");
 			System.out.print(">> ");
 		}
@@ -478,8 +441,7 @@ public class Router {
 			if (link.cStatus.equals(Link.ConnectionStatus.INIT)) {
 				initHelloProtocol(link);
 				newConnectionsCount++;
-			}
-			else if (link.cStatus.equals(Link.ConnectionStatus.NONE)) {
+			} else if (link.cStatus.equals(Link.ConnectionStatus.NONE)) {
 				link.setConnectionStatus(Link.ConnectionStatus.INIT);
 				initHelloProtocol(link);
 				newConnectionsCount++;
@@ -501,8 +463,7 @@ public class Router {
 		String message = "HELLO " + this.rd.simulatedIPAddress + " " + Link.ConnectionStatus.INIT.toString();
 		try {
 			link.outgoing.writeObject(new SOSPFPacket(message));
-		}
-		catch (IOException e) {
+		} catch (IOException e) {
 			e.printStackTrace();
 		}
 	}
@@ -516,7 +477,8 @@ public class Router {
 	 * This command does trigger the link database synchronization
 	 */
 	private void processConnect(String processIP, int processPort, String simulatedIP, int weight) {
-		// processAttach(String processIP, int processPort, String simulatedIP, int weight)
+		// processAttach(String processIP, int processPort, String simulatedIP, int
+		// weight)
 	}
 
 	/**
@@ -548,7 +510,14 @@ public class Router {
 	 * disconnect with all neighbors and quit the program
 	 */
 	private void processQuit() {
-
+		for (int i = 0; i < ports.size(); i++) {
+			processDisconnect(0);
+			try {
+				Thread.sleep(300);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
 	}
 
 	/**
@@ -600,41 +569,34 @@ public class Router {
 						}
 					}).start();
 
-				}
-				else if (command.equals("start")) {
+				} else if (command.equals("start")) {
 					(new Thread() {
 						public void run() {
 							processStart();
 						}
 					}).start();
 
-				}
-				else if (command.equals("neighbors")) {
+				} else if (command.equals("neighbors")) {
 					(new Thread() {
 						public void run() {
 							processNeighbors();
 						}
 					}).start();
-				}
-				else if (command.equals("info")) {
+				} else if (command.equals("info")) {
 					(new Thread() {
 						public void run() {
 							processInfo();
 						}
 					}).start();
-				}
-				 else if (command.startsWith("disconnect ")) {
-					 String[] cmdLine = command.split(" ");
-					 processDisconnect(Integer.parseInt(cmdLine[1]));
-				 }
-				else if (command.startsWith("detect ")) {
+				} else if (command.startsWith("disconnect ")) {
+					String[] cmdLine = command.split(" ");
+					processDisconnect(Integer.parseInt(cmdLine[1]));
+				} else if (command.startsWith("detect ")) {
 					String[] cmdLine = command.split(" ");
 					processDetect(cmdLine[1]);
-				}
-				else if (command.equals("lsaupdate")) {
+				} else if (command.equals("lsaupdate")) {
 					lsaUpdate();
-				}
-				else if (command.startsWith("connect ")) {
+				} else if (command.startsWith("connect ")) {
 					String[] cmdLine = command.split(" ");
 					(new Thread() {
 						public void run() {
@@ -645,21 +607,19 @@ public class Router {
 							processAttach(pIP, pPort, sIP, weight, true);
 						}
 					}).start();
-				}
-				else if (command.startsWith("quit ")) {
+				} else if (command.equals("quit")) {
 					processQuit();
-					break;
-				}
-				else {
+					System.exit(0);
+//					break;
+				} else {
 					System.out.println("Please enter a valid command.");
 				}
 				System.out.print(">> ");
 				command = br.readLine();
 			}
-			isReader.close();
-			br.close();
-		}
-		catch (Exception e) {
+//			isReader.close();
+//			br.close();
+		} catch (Exception e) {
 			e.printStackTrace();
 		}
 	}
