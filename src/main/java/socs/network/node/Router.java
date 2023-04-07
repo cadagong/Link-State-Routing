@@ -229,7 +229,7 @@ public class Router {
 		System.out.println(lsd.getShortestPath(destinationIP));
 	}
 
-	private void lsaForward(String receivedFrom) {
+	private synchronized void lsaForward(String receivedFrom) {
 		for (String s : ports.keySet()) {
 			// Don't send new packet to the same router you received original packet from
 			if (!s.equals(receivedFrom)) {
@@ -279,7 +279,7 @@ public class Router {
 	 * @param portNumber the port number which the link attaches at
 	 */
 	private void processDisconnect(int portNumber) {
-
+		
 	}
 
 	/**
@@ -290,7 +290,7 @@ public class Router {
 	 * 
 	 * NOTE: this command should not trigger link database synchronization
 	 */
-	private void processAttach(String processIP, int processPort, String simulatedIP, int weight) {
+	private void processAttach(String processIP, int processPort, String simulatedIP, int weight, boolean connect) {
 		if (ports.size() < 4) {
 			try {
 				if (this.ports.containsKey(simulatedIP)) {
@@ -338,7 +338,22 @@ public class Router {
 				}
 
 				// call request handler for all future communication with remote router
-				requestHandler(socket, outgoing, incoming);
+				(new Thread() {
+					public void run() {
+						requestHandler(socket, outgoing, incoming);
+					}
+				}).start();
+
+				if (connect) {
+					try {
+						Thread.sleep(200);
+						processStart();
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
+				
 			}
 			catch (UnknownHostException e) {
 				e.printStackTrace();
@@ -401,7 +416,7 @@ public class Router {
 	 * This command does trigger the link database synchronization
 	 */
 	private void processConnect(String processIP, int processPort, String simulatedIP, int weight) {
-
+		// processAttach(String processIP, int processPort, String simulatedIP, int weight)
 	}
 
 	/**
@@ -481,7 +496,7 @@ public class Router {
 							int pPort = Integer.parseInt(cmdLine[2]);
 							String sIP = cmdLine[3];
 							int weight = Integer.parseInt(cmdLine[4]);
-							processAttach(pIP, pPort, sIP, weight);
+							processAttach(pIP, pPort, sIP, weight, false);
 						}
 					}).start();
 
@@ -519,11 +534,18 @@ public class Router {
 				else if (command.equals("lsaupdate")) {
 					lsaUpdate();
 				}
-				// else if (command.equals("connect")) {
-				// String[] cmdLine = command.split(" ");
-				// processConnect(cmdLine[1], int.parseint(cmdLine[2]), cmdLine[3],
-				// int.parseint(cmdLine[4]));
-				// }
+				else if (command.startsWith("connect ")) {
+					String[] cmdLine = command.split(" ");
+					(new Thread() {
+						public void run() {
+							String pIP = cmdLine[1];
+							int pPort = Integer.parseInt(cmdLine[2]);
+							String sIP = cmdLine[3];
+							int weight = Integer.parseInt(cmdLine[4]);
+							processAttach(pIP, pPort, sIP, weight, true);
+						}
+					}).start();
+				}
 				else if (command.startsWith("quit ")) {
 					processQuit();
 					break;
