@@ -29,6 +29,7 @@ public class Router {
 	// I changed this to HashMap so it's easier to use
 	// Link[] ports = new Link[4];
 	LinkedHashMap<String, Link> ports = new LinkedHashMap<String, Link>();
+	ServerSocket serverSocket;
 
 	public Router(Configuration config) {
 
@@ -46,8 +47,8 @@ public class Router {
 		// Main thread is listening for incoming requests
 		try {
 			System.out.println("Server ready!");
-			ServerSocket serverSocket = new ServerSocket(this.rd.processPortNumber);
-			while (true) {
+			serverSocket = new ServerSocket(this.rd.processPortNumber);
+			while (!serverSocket.isClosed()) {
 				Socket socket = serverSocket.accept();
 				System.out.println("\nAccepted connection request...");
 				System.out.print(">> ");
@@ -96,9 +97,11 @@ public class Router {
 					for (LSA incomingLSA : packet.lsaArray) {
 						String simIP = incomingLSA.linkStateID;
 						int incomingSeqNum = incomingLSA.lsaSeqNumber;
-						
 
 						// System.out.println("New " + simIP + incomingLSA.lsaSeqNumber);
+//						if ((!lsd._store.containsKey(simIP)) || (lsd._store.containsKey(simIP)
+//								&& (lsd._store.get(simIP).lsaSeqNumber < incomingSeqNum
+//										|| lsd._store.get(simIP).links.size() == 1))) {
 						if ((!lsd._store.containsKey(simIP)) || (lsd._store.containsKey(simIP)
 								&& (lsd._store.get(simIP).lsaSeqNumber < incomingSeqNum))) {
 
@@ -124,11 +127,14 @@ public class Router {
 					if (updateOccured) {
 						lsaForward(packet.srcIP);
 					}
-//					for (LSA lsa : lsd._store.values()) {
-//						if (lsa.links.size() == 1) {
-//							lsd._store.remove(lsa.linkStateID);
-//						}
-//					}
+					ArrayList<LSA> lsaList = new ArrayList<LSA>(lsd._store.values());
+					for (LSA lsa : lsaList) {
+						if (lsa.links.size() == 1 && !lsa.linkStateID.equals(rd.simulatedIPAddress)) {
+							lsd._store.remove(lsa.linkStateID);
+//							System.out.println("REMOVED DISCONNECTED ROUTER: " + lsa.linkStateID);
+							lsaUpdate();
+						}
+					}
 				} else if (packet.sospfType == 0) {
 					String message = packet.message;
 					System.out.println(
@@ -227,15 +233,19 @@ public class Router {
 							e4.printStackTrace();
 						}
 						this.ports.remove(remote_sIP);
-
-						break;
+						socket.close();
+						System.out.println("\nSocket connection closed.");
+						System.out.print(">> ");
+						return;
 
 					case "acknowledge":
 						System.out.println("\nReceived disconnect acknowledgement from " + remote_sIP);
 						System.out.print(">> ");
 						this.ports.remove(remote_sIP);
-
-						break;
+						socket.close();
+						System.out.println("\nSocket connection closed.");
+						System.out.print(">> ");
+						return;
 					}
 				}
 				try {
@@ -328,6 +338,7 @@ public class Router {
 		List<Link> linkList = new ArrayList<Link>(ports.values());
 		Link link = linkList.get(portNumber);
 		String remoteIP = link.remoteRouter.simulatedIPAddress;
+//		System.out.println("DISCONNECTING FROM " + remoteIP);
 		if (link.cStatus == Link.ConnectionStatus.TWO_WAY) {
 			portNumber = portNumber + 1;
 			lsd._store.get(rd.simulatedIPAddress).links.remove(portNumber);
@@ -509,13 +520,27 @@ public class Router {
 	/**
 	 * disconnect with all neighbors and quit the program
 	 */
-	private void processQuit() {
-		for (int i = 0; i < ports.size(); i++) {
+	private synchronized void processQuit() {
+		int portSize = ports.size();
+
+//		System.out.println("PORT SIZE: " + portSize);
+		for (int i = 0; i < portSize; i++) {
+//			System.out.println("CURRENT PORT SIZE: " + ports.size());
 			processDisconnect(0);
 			try {
 				Thread.sleep(300);
 			} catch (InterruptedException e) {
 				e.printStackTrace();
+			}
+		}
+	}
+	
+	private void printLSA() {
+		for (LSA i: lsd._store.values()) {
+			System.out.println("LSA for " + i.linkStateID);
+			System.out.println("Seq num: " + i.lsaSeqNumber);
+			for (LinkDescription j: i.links) {
+				System.out.println(j.linkID + ", " + j.tosMetrics);
 			}
 		}
 	}
@@ -596,6 +621,8 @@ public class Router {
 					processDetect(cmdLine[1]);
 				} else if (command.equals("lsaupdate")) {
 					lsaUpdate();
+				} else if (command.equals("lsa")) {
+					printLSA();
 				} else if (command.startsWith("connect ")) {
 					String[] cmdLine = command.split(" ");
 					(new Thread() {
@@ -609,6 +636,7 @@ public class Router {
 					}).start();
 				} else if (command.equals("quit")) {
 					processQuit();
+//					serverSocket.close();
 					System.exit(0);
 //					break;
 				} else {
