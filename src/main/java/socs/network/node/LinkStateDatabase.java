@@ -52,7 +52,7 @@ public class LinkStateDatabase {
 	private LSA initLinkStateDatabase() {
 		LSA lsa = new LSA();
 		lsa.linkStateID = rd.simulatedIPAddress;
-		lsa.lsaSeqNumber = Integer.MIN_VALUE;
+		lsa.lsaSeqNumber = Integer.MIN_VALUE + 1;
 		LinkDescription ld = new LinkDescription(rd.simulatedIPAddress, -1, 0);
 		lsa.links.add(ld);
 		return lsa;
