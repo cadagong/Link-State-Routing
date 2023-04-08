@@ -127,14 +127,14 @@ public class Router {
 					if (updateOccured) {
 						lsaForward(packet.srcIP);
 					}
-					ArrayList<LSA> lsaList = new ArrayList<LSA>(lsd._store.values());
-					for (LSA lsa : lsaList) {
-						if (lsa.links.size() == 1 && !lsa.linkStateID.equals(rd.simulatedIPAddress)) {
-							lsd._store.remove(lsa.linkStateID);
-//							System.out.println("REMOVED DISCONNECTED ROUTER: " + lsa.linkStateID);
-							lsaUpdate();
-						}
-					}
+//					ArrayList<LSA> lsaList = new ArrayList<LSA>(lsd._store.values());
+//					for (LSA lsa : lsaList) {
+//						if (lsa.links.size() == 1 && !lsa.linkStateID.equals(rd.simulatedIPAddress) && lsa.lsaSeqNumber != Integer.MIN_VALUE) {
+//							lsd._store.remove(lsa.linkStateID);
+////							System.out.println("REMOVED DISCONNECTED ROUTER: " + lsa.linkStateID);
+//							lsaUpdate();
+//						}
+//					}
 				} else if (packet.sospfType == 0) {
 					String message = packet.message;
 					System.out.println(
@@ -221,6 +221,7 @@ public class Router {
 								break;
 							}
 						}
+						lsd._store.remove(remote_sIP);
 
 						lsaUpdate();
 
@@ -368,7 +369,8 @@ public class Router {
 	 * 
 	 * NOTE: this command should not trigger link database synchronization
 	 */
-	private void processAttach(String processIP, int processPort, String simulatedIP, int weight, boolean connect) {
+	private void processAttach(String processIP, int processPort, String simulatedIP, int weight,
+			boolean connect) {
 		if (ports.size() < 4) {
 			try {
 				if (this.ports.containsKey(simulatedIP)) {
@@ -525,6 +527,7 @@ public class Router {
 
 //		System.out.println("PORT SIZE: " + portSize);
 		for (int i = 0; i < portSize; i++) {
+//			int currentSize = ports.size();
 //			System.out.println("CURRENT PORT SIZE: " + ports.size());
 			processDisconnect(0);
 			try {
@@ -534,12 +537,12 @@ public class Router {
 			}
 		}
 	}
-	
+
 	private void printLSA() {
-		for (LSA i: lsd._store.values()) {
+		for (LSA i : lsd._store.values()) {
 			System.out.println("LSA for " + i.linkStateID);
 			System.out.println("Seq num: " + i.lsaSeqNumber);
-			for (LinkDescription j: i.links) {
+			for (LinkDescription j : i.links) {
 				System.out.println(j.linkID + ", " + j.tosMetrics);
 			}
 		}
