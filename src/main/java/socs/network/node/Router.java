@@ -18,6 +18,7 @@ import java.util.Vector;
 import socs.network.message.LSA;
 import socs.network.message.LinkDescription;
 import socs.network.message.SOSPFPacket;
+import socs.network.node.Link.ConnectionStatus;
 import socs.network.util.Configuration;
 
 public class Router {
@@ -71,6 +72,43 @@ public class Router {
 		}
 	}
 
+	private synchronized void lsaReceive(SOSPFPacket packet) {
+		boolean updateOccured = false;
+		for (LSA incomingLSA : packet.lsaArray) {
+			String simIP = incomingLSA.linkStateID;
+			int incomingSeqNum = incomingLSA.lsaSeqNumber;
+			// System.out.println("New " + simIP + incomingLSA.lsaSeqNumber);
+			if ((!lsd._store.containsKey(simIP))
+					|| (lsd._store.containsKey(simIP) && (lsd._store.get(simIP).lsaSeqNumber < incomingSeqNum))) {
+//				int oldSeqNum = 0;	
+//				if (lsd._store.containsKey(simIP)) {	
+//					oldSeqNum = lsd._store.get(simIP).lsaSeqNumber;	
+//				}	
+				lsd._store.put(simIP, incomingLSA);
+				System.out.println("\nUpdated LSA of " + simIP + ". ");
+				// System.out.println("Old sequence number: " + oldSeqNum);
+				System.out.println("New sequence number: " + incomingSeqNum);
+				System.out.print(">> ");
+				updateOccured = true;
+			} else {
+				System.out.println("\nIncoming LSA sequence number for " + simIP + " is "
+						+ "smaller than or equal to current sequence number --> not updating.");
+				System.out.print(">> ");
+			}
+		}
+		if (updateOccured) {
+			lsaForward(packet.srcIP);
+		}
+		ArrayList<LSA> lsaList = new ArrayList<LSA>(lsd._store.values());
+		for (LSA lsa : lsaList) {
+			if (lsa.links.size() == 1 && !lsa.linkStateID.equals(rd.simulatedIPAddress)) {
+				lsd._store.remove(lsa.linkStateID);
+//				System.out.println("REMOVED DISCONNECTED ROUTER: " + lsa.linkStateID);
+				lsaUpdate();
+			}
+		}
+	}
+
 	/**
 	 * process request from the remote router. For example: when router2 tries to
 	 * attach router1. Router1 can decide whether it will accept this request. The
@@ -80,61 +118,20 @@ public class Router {
 	private void requestHandler(Socket socket, ObjectOutputStream outgoing, ObjectInputStream incoming) {
 		try {
 			SOSPFPacket packet = null;
+//			boolean disconnected = false;
 			try {
 				packet = (SOSPFPacket) incoming.readObject();
 			} catch (ClassNotFoundException e1) {
 				e1.printStackTrace();
 			}
-
-			while (packet != null) {
+			System.out.println(socket.isClosed());
+			while (packet != null && socket.isClosed() == false) {
 				if (packet.sospfType == 1) { // type 1 = lsaupdate
 					System.out.println("\nhandling: LSAUPDATE message from "
 							+ socket.getRemoteSocketAddress().toString() + " with simulated IP of " + packet.srcIP);
 					System.out.print(">> ");
+					lsaReceive(packet);
 
-					boolean updateOccured = false;
-
-					for (LSA incomingLSA : packet.lsaArray) {
-						String simIP = incomingLSA.linkStateID;
-						int incomingSeqNum = incomingLSA.lsaSeqNumber;
-
-						// System.out.println("New " + simIP + incomingLSA.lsaSeqNumber);
-//						if ((!lsd._store.containsKey(simIP)) || (lsd._store.containsKey(simIP)
-//								&& (lsd._store.get(simIP).lsaSeqNumber < incomingSeqNum
-//										|| lsd._store.get(simIP).links.size() == 1))) {
-						if ((!lsd._store.containsKey(simIP)) || (lsd._store.containsKey(simIP)
-								&& (lsd._store.get(simIP).lsaSeqNumber < incomingSeqNum))) {
-
-							int oldSeqNum = 0;
-							if (lsd._store.containsKey(simIP)) {
-								oldSeqNum = lsd._store.get(simIP).lsaSeqNumber;
-							}
-							lsd._store.put(simIP, incomingLSA);
-
-							System.out.println("\nUpdated LSA of " + simIP + ". ");
-							// System.out.println("Old sequence number: " + oldSeqNum);
-							System.out.println("New sequence number: " + incomingSeqNum);
-							System.out.print(">> ");
-
-							updateOccured = true;
-						} else {
-							System.out.println("\nIncoming LSA sequence number for " + simIP + " is "
-									+ "smaller than or equal to current sequence number --> not updating.");
-							System.out.print(">> ");
-						}
-					}
-
-					if (updateOccured) {
-						lsaForward(packet.srcIP);
-					}
-					ArrayList<LSA> lsaList = new ArrayList<LSA>(lsd._store.values());
-					for (LSA lsa : lsaList) {
-						if (lsa.links.size() == 1 && !lsa.linkStateID.equals(rd.simulatedIPAddress)) {
-							lsd._store.remove(lsa.linkStateID);
-//							System.out.println("REMOVED DISCONNECTED ROUTER: " + lsa.linkStateID);
-							lsaUpdate();
-						}
-					}
 				} else if (packet.sospfType == 0) {
 					String message = packet.message;
 					System.out.println(
@@ -221,8 +218,9 @@ public class Router {
 								break;
 							}
 						}
-
+						System.out.println("HERE");
 						lsaUpdate();
+						System.out.println("HERE");
 
 						System.out.println("\nSending disconnect acknowledgement to " + remote_sIP);
 						System.out.print(">> ");
@@ -233,10 +231,17 @@ public class Router {
 							e4.printStackTrace();
 						}
 						this.ports.remove(remote_sIP);
-						socket.close();
-						System.out.println("\nSocket connection closed.");
-						System.out.print(">> ");
 						return;
+//						try {
+//							Thread.sleep(3000);
+//						} catch (InterruptedException e) {
+//							// TODO Auto-generated catch block
+//							e.printStackTrace();
+//						}
+//						socket.close();
+//						System.out.println("\nSocket connection closed.");
+//						System.out.print(">> ");
+//						disconnected = true;
 
 					case "acknowledge":
 						System.out.println("\nReceived disconnect acknowledgement from " + remote_sIP);
@@ -248,15 +253,21 @@ public class Router {
 						return;
 					}
 				}
+//				outgoing.reset();
 				try {
-					packet = (SOSPFPacket) incoming.readObject();
+					System.out.println("CLosed here: " + socket.isClosed() );
+					if (socket.isClosed() == false) {
+						packet = (SOSPFPacket) incoming.readObject();
+					} else {
+						break;
+					}
 				} catch (ClassNotFoundException e) {
 					e.printStackTrace();
 //				} catch (EOFException e5) {
-//					
+//					e5.printStackTrace();
 				}
 			}
-			socket.close();
+//			socket.close();
 			System.out.println("\nSocket connection closed.");
 			System.out.print(">> ");
 		} catch (IOException e) {
@@ -280,6 +291,9 @@ public class Router {
 	private synchronized void lsaForward(String receivedFrom) {
 		for (String s : ports.keySet()) {
 			// Don't send new packet to the same router you received original packet from
+			if (ports.get(s).cStatus != Link.ConnectionStatus.TWO_WAY) {
+				continue;
+			}
 			if (!s.equals(receivedFrom)) {
 				Link tmp = ports.get(s);
 				Vector<LSA> lsaArray = new Vector<LSA>();
@@ -290,6 +304,7 @@ public class Router {
 				SOSPFPacket outgoingLSA = new SOSPFPacket(lsaArray, rd.simulatedIPAddress);
 				try {
 					tmp.outgoing.writeObject(outgoingLSA);
+					tmp.outgoing.reset();
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
@@ -311,6 +326,9 @@ public class Router {
 		// Loops through all the links this router is connected to
 		// and sends the SOSPFPacket
 		for (Link l : ports.values()) {
+			if (l.cStatus != ConnectionStatus.TWO_WAY) {
+				continue;
+			}
 			try {
 				l.outgoing.writeObject(outgoingLSA);
 				l.outgoing.reset();
@@ -326,7 +344,7 @@ public class Router {
 	 *
 	 * @param portNumber the port number which the link attaches at
 	 */
-	private synchronized void processDisconnect(int portNumber) {
+	private void processDisconnect(int portNumber) {
 		if (portNumber < 0 || portNumber > 3) {
 			System.out.println("Invalid range. Only ports 0 to 3 are valid");
 			return;
@@ -353,10 +371,13 @@ public class Router {
 		System.out.print(">> ");
 		String message = "disconnect " + this.rd.simulatedIPAddress + " ";
 		try {
+			System.out.println(ports.get(remoteIP));
+			System.out.println(ports.get(remoteIP).outgoing);
 			ports.get(remoteIP).outgoing.writeObject(new SOSPFPacket(message));
 		} catch (IOException e1) {
 			e1.printStackTrace();
 		}
+		System.out.println("OBJECT SENT");
 
 	}
 
@@ -520,26 +541,34 @@ public class Router {
 	/**
 	 * disconnect with all neighbors and quit the program
 	 */
-	private synchronized void processQuit() {
+	private void processQuit() {
 		int portSize = ports.size();
+//		lsd.
 
 //		System.out.println("PORT SIZE: " + portSize);
 		for (int i = 0; i < portSize; i++) {
 //			System.out.println("CURRENT PORT SIZE: " + ports.size());
+			int curSize = ports.size();
+			int loopSize = ports.size();
+			System.out.println("CURSIZE: " + curSize);
 			processDisconnect(0);
-			try {
-				Thread.sleep(300);
-			} catch (InterruptedException e) {
-				e.printStackTrace();
+			while (loopSize == curSize)  {
+				try {
+					Thread.sleep(2000);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				loopSize = ports.size();
+				System.out.println("LOOPSIZE: " + loopSize);
 			}
 		}
 	}
-	
+
 	private void printLSA() {
-		for (LSA i: lsd._store.values()) {
+		for (LSA i : lsd._store.values()) {
 			System.out.println("LSA for " + i.linkStateID);
 			System.out.println("Seq num: " + i.lsaSeqNumber);
-			for (LinkDescription j: i.links) {
+			for (LinkDescription j : i.links) {
 				System.out.println(j.linkID + ", " + j.tosMetrics);
 			}
 		}
